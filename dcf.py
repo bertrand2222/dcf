@@ -12,16 +12,19 @@ from lxml import html
 import urllib3
 from string import ascii_uppercase
 urllib3.disable_warnings()
+import json
 # import pandas as pd
 
 IS = 0.25
 NB_YEAR_DCF = 5
 YEAR_G = 0
 INCOME_INFOS = [ 'FreeCashFlow','TotalRevenue', "NetIncome",  ]
-BALANCE_INFOS = ['currencyCode', 'TotalDebt', 'CashAndCashEquivalents', 'CommonStockEquity', "InvestedCapital"]
+BALANCE_INFOS = ['currencyCode', 'TotalDebt', 'CashAndCashEquivalents', 'CommonStockEquity', "InvestedCapital", "ShareIssued"]
 letters = list(ascii_uppercase)
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0'}
-
+with open("yahoo_cookies.json", "r") as file :
+    cookies = json.load(file)
+file.close()
 ### get fed fund rate (debt cost)
 url_fed_fund_rate = "https://ycharts.com/indicators/effective_federal_funds_rate"
 xpath_fed_fund_rate = "/html/body/main/div/div[4]/div/div/div/div/div[2]/div[1]/div[3]/div[2]/div/div[1]/table/tbody/tr[1]/td[2]"
@@ -31,7 +34,8 @@ text_fed_fund_rate = html.fromstring(r.content).xpath(xpath_fed_fund_rate)[0].te
 debt_cost = float(text_fed_fund_rate.strip("%")) / 100
 
 ### get free risk rate
-free_risk_rate = yq.Ticker("^TNX").price["^TNX"]['regularMarketPrice'] / 100 #us treasury ten years yield
+# free_risk_rate = yq.Ticker("^TNX").price["^TNX"]['regularMarketPrice'] / 100 #us treasury ten years yield
+free_risk_rate = yq.Ticker("^TNX").history(period = '1d', ).loc["^TNX"]["close"][-1] /100 #us treasury ten years yield
 
 ### eval market rate
 MARKET_CURRENCY = "USD"
@@ -52,14 +56,27 @@ var_rm = month_change_rm.var()
 # rate history
 rate_history_dic = {}
 rate_current_dic = {}
+
+# share profile
+SHARE_PROFILE_FILE = 'share_profile.json'
+if os.path.isfile(SHARE_PROFILE_FILE) :
+    with open(SHARE_PROFILE_FILE, "r") as file :
+        share_profile_dic = json.load(file)
+        file.close()
+else :
+    share_profile_dic = {}
 class Share():
-    def __init__(self, symbol : str) -> None:
-        self.symbol = symbol
+    def __init__(self, isin : str, source : str = "yahoo" ) -> None:
+        self.isin = isin
+        self.symbol = None
+        if source == "yahoo" :
+            self.symbol = isin
+        self.source = source
         self.fcf : float = None 
         self.cmpc = None 
         self.mean_g_fcf = None
         self.netDebt = None
-        self.y_financial_infos = None
+        self.y_financial_data = None
         self.short_name = None
         self.currentprice = None
         self.financial_currency = None
@@ -73,17 +90,19 @@ class Share():
 
     def eval_beta(self) :
 
-        history = self.tk.history(period = '5y', interval= "1mo").loc[self.symbol][:-1]
+        regular_history = self.history[:-1]
+
      
         if self.price_currency != MARKET_CURRENCY :
             change_rate = self.price_currency + MARKET_CURRENCY + "=X"
             if change_rate not in rate_history_dic :
                 currency_history = yq.Ticker(change_rate).history(period= '5y', interval= "1mo").loc[change_rate]
                 rate_history_dic[change_rate] = currency_history["close"][:-1]
+                rate_current_dic[change_rate] = currency_history["close"][-1]
         
-            history['adjclose'] = history['adjclose'] * rate_history_dic[change_rate]
+            regular_history = regular_history * rate_history_dic[change_rate]
      
-        month_change_share = history['adjclose'].pct_change().rename("share")
+        month_change_share = regular_history.pct_change().rename("share")
     
         cov_df = pd.concat([month_change_rm, month_change_share], axis = 1, join= 'inner',)
         cov = cov_df.cov()['rm'].loc['share']
@@ -92,48 +111,92 @@ class Share():
 
         return beta
     
-    def querry_financial_info(self, pr = False):
+    # def get_degiro_company_profile(self):
+
+    #     with open("company_profile.json", "r") as infile: 
+    #         company_profile =  json.load(infile)['data']
+  
+    #     self.price_currency = company_profile['ratios']['priceCurrency']
+    #     self.short_name = company_profile['contacts']['NAME']
+    #     self.nb_shares = float(company_profile['shrFloating'])
+    #     self.symbol = company_profile['issues'][0]['ticker']
+    #     exchange =  company_profile['issues'][0]['exchange']
+    #     if 'Paris' in exchange :
+    #         self.symbol += '.PA'
+    #     elif 'Tokyo' in exchange :
+    #         self.symbol += '.T'
+    #     elif 'XETRA' in exchange :
+    #         self.symbol += '.DE'
+    #     elif 'London' in exchange :
+    #         self.symbol += '.L'
+    #     elif 'Italian' in exchange :
+    #         self.symbol += ".MI"
+    #     elif 'Amsterdam' in exchange :
+    #         self.symbol += ".AS"
+
+    def querry_financial_info(self, pr = False, ):
+        
+        # if self.source == "degiro" :
+        #     self.get_degiro_company_profile()
+        
         tk = yq.Ticker(self.symbol)
         self.tk = tk
         print('\rquerry {}    '.format(self.symbol), flush=True, end="")
 
+        self.history = self.tk.history(period = '5y', interval= "1mo").loc[self.symbol]['adjclose']
+        self.currentprice = self.history[-1]
+
+
+        if not self.symbol in share_profile_dic :
+
+            url_yahoo = "https://finance.yahoo.com/quote/{0}?p={0}".format(self.symbol)
+
+            short_name_xpath = '//*[@id="quote-header-info"]/div[2]/div[1]/div[1]/h1'
+            currency_xpath = '//*[@id="quote-header-info"]/div[2]/div[1]/div[2]/span'
+            
+            # r = requests.get(url_yahoo, verify= False, headers= headers, cookies = cookies)
+            r = requests.get(url_yahoo, verify= False, headers= headers, )
+            self.short_name = html.fromstring(r.content).xpath(short_name_xpath)[0].text
+            self.price_currency = html.fromstring(r.content).xpath(currency_xpath)[0].text.split()[-1].strip(')')
+            share_profile_dic[self.symbol] = { "short_name" : self.short_name , "price_currency" : self.price_currency }
         
-        price = tk.price[self.symbol]
-        if('Quote not found' in price) :
-            print(price)
-            return(1)
+        else :
+            self.short_name = share_profile_dic[self.symbol]["short_name"]
+            self.price_currency = share_profile_dic[self.symbol]["price_currency"]
+        # price = tk.price[self.symbol]
+        # if('Quote not found' in price) :
+        #     print(price)
+        #     return(1)
         
+        # self.price_currency = price['currency'] 
+        # self.short_name = price["shortName"]
+        # self.marketCap = price['marketCap']
         
+    
         types = INCOME_INFOS + BALANCE_INFOS
-        self.y_financial_infos : pd.DataFrame = tk.get_financial_data(types,).ffill(axis = 0).drop_duplicates(subset = 'asOfDate', keep= 'last').set_index('asOfDate')
-        self.q_financial_infos = tk.get_financial_data(types , frequency= "q", trailing= False).set_index('asOfDate')
-
-
-        if isinstance(self.q_financial_infos, pd.DataFrame) :
-            self.q_financial_infos.ffill(axis = 0, inplace = True)
-            last_date_y = self.y_financial_infos.index[-1]
-            last_date_q = self.q_financial_infos.index[-1]
+        self.y_financial_data : pd.DataFrame = tk.get_financial_data(types,).ffill(axis = 0).drop_duplicates(subset = 'asOfDate', keep= 'last').set_index('asOfDate')
+        self.q_financial_data = tk.get_financial_data(types , frequency= "q", trailing= False).set_index('asOfDate')
+ 
+        if isinstance(self.q_financial_data, pd.DataFrame) :
+            self.q_financial_data.ffill(axis = 0, inplace = True)
+            last_date_y = self.y_financial_data.index[-1]
+            last_date_q = self.q_financial_data.index[-1]
             for d in BALANCE_INFOS:
-                if d in self.q_financial_infos.columns :
-                    self.y_financial_infos.loc[last_date_y , d] =  self.q_financial_infos.loc[last_date_q , d]
-        # print("\r")
-        # print(self.y_financial_infos)
-        # print(self.q_financial_infos)
-        # stop
+                if d in self.q_financial_data.columns :
+                    self.y_financial_data.loc[last_date_y , d] =  self.q_financial_data.loc[last_date_q , d]
 
-        self.price_currency = price['currency'] 
-        self.currentprice = price["regularMarketPrice"]
-        self.short_name = price["shortName"]
-        self.marketCap = price['marketCap']
+        self.nb_shares = self.y_financial_data["ShareIssued"][-1]
+        self.marketCap = self.nb_shares * self.currentprice
    
         self.eval_beta()
-        financial_currency = self.y_financial_infos['currencyCode'][-1]
+        financial_currency = self.y_financial_data['currencyCode'][-1]
         
         if self.price_currency != financial_currency:
             rate_symb = self.price_currency + financial_currency + "=X"
             if rate_symb not in rate_current_dic:
                 rate_tk = yq.Ticker(rate_symb)
-                rate_current_dic[rate_symb] = rate_tk.price[rate_symb]['regularMarketPrice']
+                rate_current_dic[rate_symb] = rate_tk.history(period = '1d', ).loc[rate_symb]["close"][-1]
+                # rate_current_dic[rate_symb] = rate_tk.price[rate_symb]['regularMarketPrice']
             rate = rate_current_dic[rate_symb]
             self.currentprice *= rate
             self.marketCap *= rate
@@ -141,14 +204,12 @@ class Share():
         self.compute_financial_info(pr = pr)
         return(0)
 
-        
-    
     def compute_financial_info(self, pr = True) :
 
-        y_financial_infos = self.y_financial_infos
-        q_financial_infos =  self.q_financial_infos
+        y_financial_data = self.y_financial_data
+        q_financial_data =  self.q_financial_data
         
-        last_financial_info =  y_financial_infos.iloc[-1]
+        last_financial_info =  y_financial_data.iloc[-1]
      
         self.nb_shares = int(self.marketCap / self.currentprice)
         stockEquity = last_financial_info['CommonStockEquity']
@@ -165,12 +226,12 @@ class Share():
             self.priceToBook = marketCap / stockEquity
         
 
-        y_financial_infos['date'] = y_financial_infos.index
-        y_financial_infos['year'] = y_financial_infos['date'].apply(lambda  x : x.year )
-        y_financial_infos.drop_duplicates(subset= "year", keep= "last", inplace= True)
+        y_financial_data['date'] = y_financial_data.index
+        y_financial_data['year'] = y_financial_data['date'].apply(lambda  x : x.year )
+        y_financial_data.drop_duplicates(subset= "year", keep= "last", inplace= True)
         
-        netIncome = y_financial_infos['NetIncome'][-3:].mean()
-        last_delta_t = relativedelta(y_financial_infos.index[-1], y_financial_infos.index[-2],)
+        netIncome = y_financial_data['NetIncome'][-3:].mean()
+        last_delta_t = relativedelta(y_financial_data.index[-1], y_financial_data.index[-2],)
 
         if netIncome >= 0 : 
             self.per = marketCap / netIncome
@@ -179,26 +240,26 @@ class Share():
             self.roic = netIncome / investedCapital
         
 
-        if last_delta_t.years < 1 and isinstance(q_financial_infos, pd.DataFrame) and ('FreeCashFlow' in q_financial_infos.columns) and  (self.q_financial_infos.index[-1] > y_financial_infos.index[-2]) :
+        if last_delta_t.years < 1 and isinstance(q_financial_data, pd.DataFrame) and ('FreeCashFlow' in q_financial_data.columns) and  (self.q_financial_data.index[-1] > y_financial_data.index[-2]) :
            
-            complement_q_financial_infos = self.q_financial_infos[self.q_financial_infos.index > y_financial_infos.index[-2]]
-            complement_time = relativedelta(complement_q_financial_infos.index[-1], y_financial_infos.index[-2]).months / 12
-            self.fcf = (y_financial_infos['FreeCashFlow'][-4:-1].sum() + complement_q_financial_infos['FreeCashFlow'].sum()) / (3 + complement_time)
+            complement_q_financial_infos = self.q_financial_data[self.q_financial_data.index > y_financial_data.index[-2]]
+            complement_time = relativedelta(complement_q_financial_infos.index[-1], y_financial_data.index[-2]).months / 12
+            self.fcf = (y_financial_data['FreeCashFlow'][-4:-1].sum() + complement_q_financial_infos['FreeCashFlow'].sum()) / (3 + complement_time)
             
         else : 
-            self.fcf = y_financial_infos['FreeCashFlow'][-3:].mean()
+            self.fcf = y_financial_data['FreeCashFlow'][-3:].mean()
         
         # if self.fcf < 0 :
         #     self.fcf = y_financial_infos['FreeCashFlow'][-1]
 
         if self.fcf < 0 :
-            self.fcf = y_financial_infos['FreeCashFlow'].mean()
+            self.fcf = y_financial_data['FreeCashFlow'].mean()
 
      
-        delta_t = relativedelta(y_financial_infos.index[-1], y_financial_infos.index[YEAR_G],)
+        delta_t = relativedelta(y_financial_data.index[-1], y_financial_data.index[YEAR_G],)
         nb_years_fcf = delta_t.years + delta_t.months / 12
 
-        fcf_se_ratio = y_financial_infos['FreeCashFlow'][-1]/y_financial_infos['FreeCashFlow'][YEAR_G]
+        fcf_se_ratio = y_financial_data['FreeCashFlow'][-1]/y_financial_data['FreeCashFlow'][YEAR_G]
         if fcf_se_ratio < 0:
             self.mean_g_fcf = np.nan
         else :
@@ -208,8 +269,8 @@ class Share():
 
         nb_year_inc = delta_t.years + delta_t.months / 12
    
-        self.mean_g_tr = (y_financial_infos['TotalRevenue'][-1]/y_financial_infos['TotalRevenue'][YEAR_G])**(1/nb_year_inc) - 1
-        inc_se_ratio = y_financial_infos['NetIncome'][-1]/y_financial_infos['NetIncome'][YEAR_G]
+        self.mean_g_tr = (y_financial_data['TotalRevenue'][-1]/y_financial_data['TotalRevenue'][YEAR_G])**(1/nb_year_inc) - 1
+        inc_se_ratio = y_financial_data['NetIncome'][-1]/y_financial_data['NetIncome'][YEAR_G]
         if inc_se_ratio < 0 :
             self.mean_g_netinc = np.nan
         else : 
@@ -218,7 +279,7 @@ class Share():
         if pr :
 
             print("\r")
-            print(y_financial_infos)
+            print(y_financial_data)
             print("Prix courant: {0:.2f} {1:s}".format(self.currentprice, self.financial_currency) )
             print("Cout moyen pondere du capital: {0:.2f}%".format(self.cmpc*100) )
             print("Croissance moyenne du chiffre d'affaire sur {0:f} ans: {1:.2f}%".format(nb_year_inc,self.mean_g_tr*100))
@@ -297,6 +358,10 @@ def get_dcf_(g, *data):
 def resume_list(symbol_list : list[str | tuple]):
     share_list = [Share(sym) for sym in symbol_list]
     g_l = [s.eval_g() for s in share_list]
+    
+    with open(SHARE_PROFILE_FILE, "w") as outfile :
+        json.dump(share_profile_dic, outfile, indent = 4)
+        outfile.close() 
     df = pd.DataFrame(index= symbol_list, data= {'short_name' : [s.short_name for s in share_list] ,
                                                 'current_price' : [s.currentprice for s in share_list],
                                                 'currency' : [s.financial_currency for s in share_list],
@@ -363,7 +428,7 @@ def resume_list(symbol_list : list[str | tuple]):
     worksheet.conditional_format(f"{col_letter['price_to_book']}2:{col_letter['price_to_book']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format3})
     worksheet.conditional_format(f"{col_letter['price_to_book']}2:{col_letter['price_to_book']}{len(df.index)+1}", 
                                  {"type": "3_color_scale", 'min_type': 'num','max_type': 'num', 'mid_type' : 'percentile',
-                            'min_value' : 0.5, 'mid_value' : 50, "max_value" : 10, 'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
+                            'min_value' : 1, 'mid_value' : 50, "max_value" : 10, 'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
     
     #
     worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format1})
