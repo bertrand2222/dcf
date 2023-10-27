@@ -34,7 +34,6 @@ text_fed_fund_rate = html.fromstring(r.content).xpath(xpath_fed_fund_rate)[0].te
 debt_cost = float(text_fed_fund_rate.strip("%")) / 100
 
 ### get free risk rate
-# free_risk_rate = yq.Ticker("^TNX").price["^TNX"]['regularMarketPrice'] / 100 #us treasury ten years yield
 free_risk_rate = yq.Ticker("^TNX").history(period = '1d', ).loc["^TNX"]["close"][-1] /100 #us treasury ten years yield
 
 ### eval market rate
@@ -110,34 +109,8 @@ class Share():
         self.beta = beta
 
         return beta
-    
-    # def get_degiro_company_profile(self):
-
-    #     with open("company_profile.json", "r") as infile: 
-    #         company_profile =  json.load(infile)['data']
-  
-    #     self.price_currency = company_profile['ratios']['priceCurrency']
-    #     self.short_name = company_profile['contacts']['NAME']
-    #     self.nb_shares = float(company_profile['shrFloating'])
-    #     self.symbol = company_profile['issues'][0]['ticker']
-    #     exchange =  company_profile['issues'][0]['exchange']
-    #     if 'Paris' in exchange :
-    #         self.symbol += '.PA'
-    #     elif 'Tokyo' in exchange :
-    #         self.symbol += '.T'
-    #     elif 'XETRA' in exchange :
-    #         self.symbol += '.DE'
-    #     elif 'London' in exchange :
-    #         self.symbol += '.L'
-    #     elif 'Italian' in exchange :
-    #         self.symbol += ".MI"
-    #     elif 'Amsterdam' in exchange :
-    #         self.symbol += ".AS"
 
     def querry_financial_info(self, pr = False, ):
-        
-        # if self.source == "degiro" :
-        #     self.get_degiro_company_profile()
         
         tk = yq.Ticker(self.symbol)
         self.tk = tk
@@ -145,7 +118,6 @@ class Share():
 
         self.history = self.tk.history(period = '5y', interval= "1mo").loc[self.symbol]['adjclose']
         self.currentprice = self.history[-1]
-
 
         if not self.symbol in share_profile_dic :
 
