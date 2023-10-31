@@ -1,0 +1,350 @@
+{
+    "RR.L": {
+        "short_name": "Rolls-Royce Holdings plc (RR.L)",
+        "price_currency": "GBP"
+    },
+    "AAPL": {
+        "short_name": "Apple Inc. (AAPL)",
+        "price_currency": "USD"
+    },
+    "OR.PA": {
+        "short_name": "L'Or\u00e9al S.A. (OR.PA)",
+        "price_currency": "EUR"
+    },
+    "GE": {
+        "short_name": "General Electric Company (GE)",
+        "price_currency": "USD"
+    },
+    "TE.PA": {
+        "short_name": "Technip Energies N.V. (TE.PA)",
+        "price_currency": "EUR"
+    },
+    "RUI.PA": {
+        "short_name": "Rubis (RUI.PA)",
+        "price_currency": "EUR"
+    },
+    "BNP.PA": {
+        "short_name": "BNP Paribas SA (BNP.PA)",
+        "price_currency": "EUR"
+    },
+    "FRVIA.PA": {
+        "short_name": "Forvia SE (FRVIA.PA)",
+        "price_currency": "EUR"
+    },
+    "GLE.PA": {
+        "short_name": "Soci\u00e9t\u00e9 G\u00e9n\u00e9rale Soci\u00e9t\u00e9 anonyme (GLE.PA)",
+        "price_currency": "EUR"
+    },
+    "ASML.AS": {
+        "short_name": "ASML Holding N.V. (ASML.AS)",
+        "price_currency": "EUR"
+    },
+    "DELL": {
+        "short_name": "Dell Technologies Inc. (DELL)",
+        "price_currency": "USD"
+    },
+    "TSLA": {
+        "short_name": "Tesla, Inc. (TSLA)",
+        "price_currency": "USD"
+    },
+    "MT.AS": {
+        "short_name": "ArcelorMittal S.A. (MT.AS)",
+        "price_currency": "EUR"
+    },
+    "ERA.PA": {
+        "short_name": "ERAMET S.A. (ERA.PA)",
+        "price_currency": "EUR"
+    },
+    "MC.PA": {
+        "short_name": "LVMH Mo\u00ebt Hennessy - Louis Vuitton, Soci\u00e9t\u00e9 Europ\u00e9enne (MC.PA)",
+        "price_currency": "EUR"
+    },
+    "CARL-B.CO": {
+        "short_name": "Carlsberg A/S (CARL-B.CO)",
+        "price_currency": "DKK"
+    },
+    "TEP.PA": {
+        "short_name": "Teleperformance SE (TEP.PA)",
+        "price_currency": "EUR"
+    },
+    "AMZN": {
+        "short_name": "Amazon.com, Inc. (AMZN)",
+        "price_currency": "USD"
+    },
+    "TTE": {
+        "short_name": "TotalEnergies SE (TTE)",
+        "price_currency": "USD"
+    },
+    "SPM.MI": {
+        "short_name": "Saipem SpA (SPM.MI)",
+        "price_currency": "EUR"
+    },
+    "SAF.PA": {
+        "short_name": "Safran SA (SAF.PA)",
+        "price_currency": "EUR"
+    },
+    "PBR": {
+        "short_name": "Petr\u00f3leo Brasileiro S.A. - Petrobras (PBR)",
+        "price_currency": "USD"
+    },
+    "RMS.PA": {
+        "short_name": "Herm\u00e8s International Soci\u00e9t\u00e9 en commandite par actions (RMS.PA)",
+        "price_currency": "EUR"
+    },
+    "AKE.PA": {
+        "short_name": "Arkema S.A. (AKE.PA)",
+        "price_currency": "EUR"
+    },
+    "NVDA": {
+        "short_name": "NVIDIA Corporation (NVDA)",
+        "price_currency": "USD"
+    },
+    "SAN.PA": {
+        "short_name": "Sanofi (SAN.PA)",
+        "price_currency": "EUR"
+    },
+    "DG.PA": {
+        "short_name": "Vinci SA (DG.PA)",
+        "price_currency": "EUR"
+    },
+    "RS": {
+        "short_name": "Reliance Steel & Aluminum Co. (RS)",
+        "price_currency": "USD"
+    },
+    "APAM.AS": {
+        "short_name": "Aperam S.A. (APAM.AS)",
+        "price_currency": "EUR"
+    },
+    "AI.PA": {
+        "short_name": "L'Air Liquide S.A. (AI.PA)",
+        "price_currency": "EUR"
+    },
+    "DSY.PA": {
+        "short_name": "Dassault Syst\u00e8mes SE (DSY.PA)",
+        "price_currency": "EUR"
+    },
+    "MSFT": {
+        "short_name": "Microsoft Corporation (MSFT)",
+        "price_currency": "USD"
+    },
+    "SGO.PA": {
+        "short_name": "Compagnie de Saint-Gobain S.A. (SGO.PA)",
+        "price_currency": "EUR"
+    },
+    "CS.PA": {
+        "short_name": "AXA SA (CS.PA)",
+        "price_currency": "EUR"
+    },
+    "FGR.PA": {
+        "short_name": "Eiffage SA (FGR.PA)",
+        "price_currency": "EUR"
+    },
+    "GOOG": {
+        "short_name": "Alphabet Inc. (GOOG)",
+        "price_currency": "USD"
+    },
+    "CA.PA": {
+        "short_name": "Carrefour SA (CA.PA)",
+        "price_currency": "EUR"
+    },
+    "META": {
+        "short_name": "Meta Platforms, Inc. (META)",
+        "price_currency": "USD"
+    },
+    "AIR.PA": {
+        "short_name": "Airbus SE (AIR.PA)",
+        "price_currency": "EUR"
+    },
+    "CAP.PA": {
+        "short_name": "Capgemini SE (CAP.PA)",
+        "price_currency": "EUR"
+    },
+    "HO.PA": {
+        "short_name": "Thales S.A. (HO.PA)",
+        "price_currency": "EUR"
+    },
+    "COFA.PA": {
+        "short_name": "COFACE SA (COFA.PA)",
+        "price_currency": "EUR"
+    },
+    "STLAP.PA": {
+        "short_name": "Stellantis N.V. (STLAP.PA)",
+        "price_currency": "EUR"
+    },
+    "EPD": {
+        "short_name": "Enterprise Products Partners L.P. (EPD)",
+        "price_currency": "USD"
+    },
+    "DBG.PA": {
+        "short_name": "Derichebourg SA (DBG.PA)",
+        "price_currency": "EUR"
+    },
+    "BN.PA": {
+        "short_name": "Danone S.A. (BN.PA)",
+        "price_currency": "EUR"
+    },
+    "AC.PA": {
+        "short_name": "Accor SA (AC.PA)",
+        "price_currency": "EUR"
+    },
+    "TSM": {
+        "short_name": "Taiwan Semiconductor Manufacturing Company Limited (TSM)",
+        "price_currency": "USD"
+    },
+    "TLW.L": {
+        "short_name": "Tullow Oil plc (TLW.L)",
+        "price_currency": "GBP"
+    },
+    "INTC": {
+        "short_name": "Intel Corporation (INTC)",
+        "price_currency": "USD"
+    },
+    "SCI": {
+        "short_name": "Service Corporation International (SCI)",
+        "price_currency": "USD"
+    },
+    "ACA.PA": {
+        "short_name": "Cr\u00e9dit Agricole S.A. (ACA.PA)",
+        "price_currency": "EUR"
+    },
+    "STMPA.PA": {
+        "short_name": "STMicroelectronics N.V. (STMPA.PA)",
+        "price_currency": "EUR"
+    },
+    "RWE.DE": {
+        "short_name": "RWE Aktiengesellschaft (RWE.DE)",
+        "price_currency": "EUR"
+    },
+    "PYPL": {
+        "short_name": "PayPal Holdings, Inc. (PYPL)",
+        "price_currency": "USD"
+    },
+    "SW.PA": {
+        "short_name": "Sodexo S.A. (SW.PA)",
+        "price_currency": "EUR"
+    },
+    "SUBCY": {
+        "short_name": "Subsea 7 S.A. (SUBCY)",
+        "price_currency": "USD"
+    },
+    "GTT.PA": {
+        "short_name": "Gaztransport & Technigaz SA (GTT.PA)",
+        "price_currency": "EUR"
+    },
+    "PAH3.DE": {
+        "short_name": "Porsche Automobil Holding SE (PAH3.DE)",
+        "price_currency": "EUR"
+    },
+    "CRH": {
+        "short_name": "CRH plc (CRH)",
+        "price_currency": "USD"
+    },
+    "ENGI.PA": {
+        "short_name": "Engie SA (ENGI.PA)",
+        "price_currency": "EUR"
+    },
+    "VK.PA": {
+        "short_name": "Vallourec S.A. (VK.PA)",
+        "price_currency": "EUR"
+    },
+    "ATE.PA": {
+        "short_name": "Alten S.A. (ATE.PA)",
+        "price_currency": "EUR"
+    },
+    "ENI.MI": {
+        "short_name": "Eni S.p.A. (ENI.MI)",
+        "price_currency": "EUR"
+    },
+    "RI.PA": {
+        "short_name": "Pernod Ricard SA (RI.PA)",
+        "price_currency": "EUR"
+    },
+    "FNAC.PA": {
+        "short_name": "Fnac Darty SA (FNAC.PA)",
+        "price_currency": "EUR"
+    },
+    "SU.PA": {
+        "short_name": "Schneider Electric S.E. (SU.PA)",
+        "price_currency": "EUR"
+    },
+    "8GC.F": {
+        "short_name": "Glencore plc (8GC.F)",
+        "price_currency": "EUR"
+    },
+    "AMUN.PA": {
+        "short_name": "Amundi S.A. (AMUN.PA)",
+        "price_currency": "EUR"
+    },
+    "HEIA.AS": {
+        "short_name": "Heineken N.V. (HEIA.AS)",
+        "price_currency": "EUR"
+    },
+    "8058.T": {
+        "short_name": "Mitsubishi Corporation (8058.T)",
+        "price_currency": "JPY"
+    },
+    "8002.T": {
+        "short_name": "Marubeni Corporation (8002.T)",
+        "price_currency": "JPY"
+    },
+    "BAC": {
+        "short_name": "Bank of America Corporation (BAC)",
+        "price_currency": "USD"
+    },
+    "USB": {
+        "short_name": "U.S. Bancorp (USB)",
+        "price_currency": "USD"
+    },
+    "BMW.DE": {
+        "short_name": "Bayerische Motoren Werke Aktiengesellschaft (BMW.DE)",
+        "price_currency": "EUR"
+    },
+    "VOW.DE": {
+        "short_name": "Volkswagen AG (VOW.DE)",
+        "price_currency": "EUR"
+    },
+    "EC.PA": {
+        "short_name": "TotalEnergies EP Gabon Soci\u00e9t\u00e9 Anonyme (EC.PA)",
+        "price_currency": "EUR"
+    },
+    "ETL.PA": {
+        "short_name": "Eutelsat Group (ETL.PA)",
+        "price_currency": "EUR"
+    },
+    "VRLA.PA": {
+        "short_name": "Verallia Soci\u00e9t\u00e9 Anonyme (VRLA.PA)",
+        "price_currency": "EUR"
+    },
+    "SII.PA": {
+        "short_name": "SII S.A. (SII.PA)",
+        "price_currency": "EUR"
+    },
+    "RXL.PA": {
+        "short_name": "Rexel S.A. (RXL.PA)",
+        "price_currency": "EUR"
+    },
+    "MAU.PA": {
+        "short_name": "Etablissements Maurel & Prom S.A. (MAU.PA)",
+        "price_currency": "EUR"
+    },
+    "EQNR": {
+        "short_name": "Equinor ASA (EQNR)",
+        "price_currency": "USD"
+    },
+    "SCR.PA": {
+        "short_name": "SCOR SE (SCR.PA)",
+        "price_currency": "EUR"
+    },
+    "XOM": {
+        "short_name": "Exxon Mobil Corporation (XOM)",
+        "price_currency": "USD"
+    },
+    "CVX": {
+        "short_name": "Chevron Corporation (CVX)",
+        "price_currency": "USD"
+    },
+    "AZN": {
+        "short_name": "AstraZeneca PLC (AZN)",
+        "price_currency": "USD"
+    }
+}
