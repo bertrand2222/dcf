@@ -13,6 +13,7 @@ import urllib3
 from string import ascii_uppercase
 urllib3.disable_warnings()
 import json
+import subprocess
 # import pandas as pd
 
 IS = 0.25
@@ -22,9 +23,7 @@ INCOME_INFOS = [ 'FreeCashFlow','TotalRevenue', "NetIncome",  ]
 BALANCE_INFOS = ['currencyCode', 'TotalDebt', 'CashAndCashEquivalents', 'CommonStockEquity', "InvestedCapital", "ShareIssued"]
 letters = list(ascii_uppercase)
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0'}
-with open("yahoo_cookies.json", "r") as file :
-    cookies = json.load(file)
-file.close()
+
 ### get fed fund rate (debt cost)
 url_fed_fund_rate = "https://ycharts.com/indicators/effective_federal_funds_rate"
 xpath_fed_fund_rate = "/html/body/main/div/div[4]/div/div/div/div/div[2]/div[1]/div[3]/div[2]/div/div[1]/table/tbody/tr[1]/td[2]"
@@ -327,7 +326,7 @@ def get_dcf_(g, *data):
     # return ((enterpriseValue - netDebt)/ share.marketCap - 1)**2
     return (enterpriseValue / share.netMarketCap - 1)**2
 
-def resume_list(symbol_list : list[str | tuple]):
+def resume_list(symbol_list : list[str | tuple], xl_outfile : str = None):
     share_list = [Share(sym) for sym in symbol_list]
     g_l = [s.eval_g() for s in share_list]
     
@@ -354,8 +353,9 @@ def resume_list(symbol_list : list[str | tuple]):
     col_letter = {c : letters[i+1] for i, c in enumerate(df.columns)}
     df.sort_values(by = ['assumed_g', 'debt_ratio']  , inplace= True, ascending= True)
 
-    filename = "C:/Users/SS7F1141/Documents/dcf.xlsx"
-    writer = pd.ExcelWriter(filename)
+
+   
+    writer = pd.ExcelWriter(xl_outfile,  engine="xlsxwriter")
     df.to_excel(writer, sheet_name= "dcf")
     wb = writer.book
     number = wb.add_format({'num_format': '0.00'})
@@ -406,7 +406,7 @@ def resume_list(symbol_list : list[str | tuple]):
     worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format1})
     worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": ">", "value": 0, "format": format2})
     writer.close()
-    os.startfile(filename)
+    subprocess.call(["open", xl_outfile])
     
     # valss = df.values.tolist()
     # for vals in valss:
