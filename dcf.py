@@ -33,7 +33,7 @@ text_fed_fund_rate = html.fromstring(r.content).xpath(xpath_fed_fund_rate)[0].te
 debt_cost = float(text_fed_fund_rate.strip("%")) / 100
 
 ### get free risk rate
-free_risk_rate = yq.Ticker("^TNX").history(period = '1d', ).loc["^TNX"]["close"][-1] /100 #us treasury ten years yield
+free_risk_rate = yq.Ticker("^TNX").history(period = '1d', ).loc["^TNX"]["close"].iloc[-1] /100 #us treasury ten years yield
 
 ### eval market rate
 MARKET_CURRENCY = "USD"
@@ -96,7 +96,7 @@ class Share():
             if change_rate not in rate_history_dic :
                 currency_history = yq.Ticker(change_rate).history(period= '5y', interval= "1mo").loc[change_rate]
                 rate_history_dic[change_rate] = currency_history["close"][:-1]
-                rate_current_dic[change_rate] = currency_history["close"][-1]
+                rate_current_dic[change_rate] = currency_history["close"].iloc[-1]
         
             regular_history = regular_history * rate_history_dic[change_rate]
      
@@ -116,7 +116,7 @@ class Share():
         print('\rquerry {}    '.format(self.symbol), flush=True, end="")
 
         self.history = self.tk.history(period = '5y', interval= "1mo").loc[self.symbol]['adjclose']
-        self.currentprice = self.history[-1]
+        self.currentprice = self.history.iloc[-1]
 
         if not self.symbol in share_profile_dic :
 
@@ -156,17 +156,17 @@ class Share():
                 if d in self.q_financial_data.columns :
                     self.y_financial_data.loc[last_date_y , d] =  self.q_financial_data.loc[last_date_q , d]
 
-        self.nb_shares = self.y_financial_data["ShareIssued"][-1]
+        self.nb_shares = self.y_financial_data["ShareIssued"].iloc[-1]
         self.marketCap = self.nb_shares * self.currentprice
    
         self.eval_beta()
-        financial_currency = self.y_financial_data['currencyCode'][-1]
+        financial_currency = self.y_financial_data['currencyCode'].iloc[-1]
         
         if self.price_currency != financial_currency:
             rate_symb = self.price_currency + financial_currency + "=X"
             if rate_symb not in rate_current_dic:
                 rate_tk = yq.Ticker(rate_symb)
-                rate_current_dic[rate_symb] = rate_tk.history(period = '1d', ).loc[rate_symb]["close"][-1]
+                rate_current_dic[rate_symb] = rate_tk.history(period = '1d', ).loc[rate_symb]["close"].iloc[-1]
                 # rate_current_dic[rate_symb] = rate_tk.price[rate_symb]['regularMarketPrice']
             rate = rate_current_dic[rate_symb]
             self.currentprice *= rate
@@ -230,7 +230,7 @@ class Share():
         delta_t = relativedelta(y_financial_data.index[-1], y_financial_data.index[YEAR_G],)
         nb_years_fcf = delta_t.years + delta_t.months / 12
 
-        fcf_se_ratio = y_financial_data['FreeCashFlow'][-1]/y_financial_data['FreeCashFlow'][YEAR_G]
+        fcf_se_ratio = y_financial_data['FreeCashFlow'].iloc[-1]/y_financial_data['FreeCashFlow'].iloc[YEAR_G]
         if fcf_se_ratio < 0:
             self.mean_g_fcf = np.nan
         else :
@@ -240,8 +240,8 @@ class Share():
 
         nb_year_inc = delta_t.years + delta_t.months / 12
    
-        self.mean_g_tr = (y_financial_data['TotalRevenue'][-1]/y_financial_data['TotalRevenue'][YEAR_G])**(1/nb_year_inc) - 1
-        inc_se_ratio = y_financial_data['NetIncome'][-1]/y_financial_data['NetIncome'][YEAR_G]
+        self.mean_g_tr = (y_financial_data['TotalRevenue'].iloc[-1]/y_financial_data['TotalRevenue'].iloc[YEAR_G])**(1/nb_year_inc) - 1
+        inc_se_ratio = y_financial_data['NetIncome'].iloc[-1]/y_financial_data['NetIncome'].iloc[YEAR_G]
         if inc_se_ratio < 0 :
             self.mean_g_netinc = np.nan
         else : 
