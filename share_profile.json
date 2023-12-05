@@ -346,5 +346,13 @@
     "AZN": {
         "short_name": "AstraZeneca PLC (AZN)",
         "price_currency": "USD"
+    },
+    "ALO.PA": {
+        "short_name": "Alstom SA (ALO.PA)",
+        "price_currency": "EUR"
+    },
+    "DIS": {
+        "short_name": "The Walt Disney Company (DIS)",
+        "price_currency": "USD"
     }
 }

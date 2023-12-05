@@ -19,9 +19,11 @@ import sys
 
 IS = 0.25
 NB_YEAR_DCF = 5
+HISTORY_TIME = 5 
 YEAR_G = 0
 INCOME_INFOS = [ 'FreeCashFlow','TotalRevenue', "NetIncome",  ]
 BALANCE_INFOS = ['currencyCode', 'TotalDebt', 'CashAndCashEquivalents', 'CommonStockEquity', "InvestedCapital", "ShareIssued"]
+TYPES = INCOME_INFOS + BALANCE_INFOS
 letters = list(ascii_uppercase)
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0'}
 
@@ -34,23 +36,34 @@ text_fed_fund_rate = html.fromstring(r.content).xpath(xpath_fed_fund_rate)[0].te
 debt_cost = float(text_fed_fund_rate.strip("%")) / 100
 
 ### get free risk rate
-free_risk_rate = yq.Ticker("^TNX").history(period = '1d', ).loc["^TNX"]["close"][-1] /100 #us treasury ten years yield
+
+free_risk_rate = yq.Ticker("^TNX").history(period = '1y', ).loc["^TNX"]["close"].iloc[-1] /100 #us treasury ten years yield
 
 ### eval market rate
 MARKET_CURRENCY = "USD"
-sptr = yq.Ticker("^SP500TR").history(period = '5y', interval= "1mo").loc["^SP500TR"]
-last_date = sptr.index[-2]
-past_date = sptr.index[0]
-delta = relativedelta(last_date, past_date)
-timeDelta = delta.years + delta.months / 12 + delta.days / 365
-market_rate =  (sptr.loc[last_date]['close'] / sptr.loc[past_date]['close'])**(1/timeDelta) - 1 # S&P 500 mean year rate over 5 years
+sptr_6y = yq.Ticker("^SP500TR").history(period = '6y', interval= "1mo").loc["^SP500TR"]
+sptr_6y_rm = sptr_6y.rolling(2).mean()
+# sptr = yq.Ticker("^SP500TR").history(period = '5y', interval= "1mo").loc["^SP500TR"]
+# past_date = sptr.index[0]
+# last_date = sptr.index[-2]
+
+last_date = sptr_6y.index[-2]
+timeDelta = HISTORY_TIME
+past_date = last_date - relativedelta(years = timeDelta)
+sptr = sptr_6y.loc[past_date:]
+sptr_rm = sptr_6y_rm.loc[past_date:]
+
+
+# delta = relativedelta(last_date, past_date)
+# timeDelta = delta.years + delta.months / 12 + delta.days / 365
+market_rate =  (sptr_rm.loc[last_date]['close'] / sptr_rm.loc[past_date]['close'])**(1/timeDelta) - 1 # S&P 500 mean year rate over 5 years
 
 print("debt cost = {}%".format(debt_cost*100))
 print("free risk rate = {0:.2f}%".format(free_risk_rate*100))
 print("market rate = {0:.2f}%".format(market_rate*100))
 
-month_change_rm = sptr["adjclose"][:-1].pct_change(periods = 1).rename('rm')
-var_rm = month_change_rm.var()
+month_change_rate = sptr["adjclose"][:-1].pct_change(periods = 1).rename('rm')
+var_rm = month_change_rate.var()
 
 # rate history
 rate_history_dic = {}
@@ -96,14 +109,14 @@ class Share():
             change_rate = self.price_currency + MARKET_CURRENCY + "=X"
             if change_rate not in rate_history_dic :
                 currency_history = yq.Ticker(change_rate).history(period= '5y', interval= "1mo").loc[change_rate]
-                rate_history_dic[change_rate] = currency_history["close"][:-1]
-                rate_current_dic[change_rate] = currency_history["close"][-1]
-        
+                rate_history_dic[change_rate] = currency_history["close"].iloc[:-1]
+                rate_current_dic[change_rate] = currency_history["close"].iloc[-1]
+
             regular_history = regular_history * rate_history_dic[change_rate]
      
         month_change_share = regular_history.pct_change().rename("share")
-    
-        cov_df = pd.concat([month_change_rm, month_change_share], axis = 1, join= 'inner',)
+       
+        cov_df = pd.concat([month_change_rate, month_change_share], axis = 1, join= 'inner',).dropna(how = 'any')
         cov = cov_df.cov()['rm'].loc['share']
         beta = cov/ var_rm
         self.beta = beta
@@ -126,7 +139,6 @@ class Share():
             short_name_xpath = '//*[@id="quote-header-info"]/div[2]/div[1]/div[1]/h1'
             currency_xpath = '//*[@id="quote-header-info"]/div[2]/div[1]/div[2]/span'
             
-            # r = requests.get(url_yahoo, verify= False, headers= headers, cookies = cookies)
             r = requests.get(url_yahoo, verify= False, headers= headers, )
             self.short_name = html.fromstring(r.content).xpath(short_name_xpath)[0].text
             self.price_currency = html.fromstring(r.content).xpath(currency_xpath)[0].text.split()[-1].strip(')')
@@ -144,9 +156,13 @@ class Share():
         # self.marketCap = price['marketCap']
         
     
-        types = INCOME_INFOS + BALANCE_INFOS
-        self.y_financial_data : pd.DataFrame = tk.get_financial_data(types,).ffill(axis = 0).drop_duplicates(subset = 'asOfDate', keep= 'last').set_index('asOfDate')
-        self.q_financial_data = tk.get_financial_data(types , frequency= "q", trailing= False).set_index('asOfDate')
+        
+        # print(self.tk.get_financial_data(TYPES,))
+        self.y_financial_data : pd.DataFrame = tk.get_financial_data(TYPES,)
+        self.unknown_last_fcf = np.isnan(self.y_financial_data["FreeCashFlow"].iloc[-1])
+        self.y_financial_data = self.y_financial_data.ffill(axis = 0).drop_duplicates(subset = 'asOfDate', keep= 'last').set_index('asOfDate')
+        self.q_financial_data = tk.get_financial_data(TYPES , frequency= "q", trailing= False).set_index('asOfDate')
+
  
         if isinstance(self.q_financial_data, pd.DataFrame) :
             self.q_financial_data.ffill(axis = 0, inplace = True)
@@ -156,18 +172,17 @@ class Share():
                 if d in self.q_financial_data.columns :
                     self.y_financial_data.loc[last_date_y , d] =  self.q_financial_data.loc[last_date_q , d]
 
-        self.nb_shares = self.y_financial_data["ShareIssued"][-1]
+        self.nb_shares = self.y_financial_data["ShareIssued"].iloc[-1]
         self.marketCap = self.nb_shares * self.currentprice
    
         self.eval_beta()
-        financial_currency = self.y_financial_data['currencyCode'][-1]
+        financial_currency = self.y_financial_data['currencyCode'].iloc[-1]
         
         if self.price_currency != financial_currency:
             rate_symb = self.price_currency + financial_currency + "=X"
             if rate_symb not in rate_current_dic:
                 rate_tk = yq.Ticker(rate_symb)
-                rate_current_dic[rate_symb] = rate_tk.history(period = '1d', ).loc[rate_symb]["close"][-1]
-                # rate_current_dic[rate_symb] = rate_tk.price[rate_symb]['regularMarketPrice']
+                rate_current_dic[rate_symb] = rate_tk.history(period = '1d', ).loc[rate_symb]["close"].iloc[-1]
             rate = rate_current_dic[rate_symb]
             self.currentprice *= rate
             self.marketCap *= rate
@@ -212,11 +227,15 @@ class Share():
         
 
         if last_delta_t.years < 1 and isinstance(q_financial_data, pd.DataFrame) and ('FreeCashFlow' in q_financial_data.columns) and  (self.q_financial_data.index[-1] > y_financial_data.index[-2]) :
-           
             complement_q_financial_infos = self.q_financial_data[self.q_financial_data.index > y_financial_data.index[-2]]
             complement_time = relativedelta(complement_q_financial_infos.index[-1], y_financial_data.index[-2]).months / 12
             self.fcf = (y_financial_data['FreeCashFlow'][-4:-1].sum() + complement_q_financial_infos['FreeCashFlow'].sum()) / (3 + complement_time)
-            
+
+        # elif y_financial_data['FreeCashFlow'].iloc[-1] == y_financial_data['FreeCashFlow'].iloc[-2] : 
+        elif self.unknown_last_fcf :
+            print("free cash flow inconnu") 
+            self.fcf = y_financial_data['FreeCashFlow'][-4:-1].mean()
+
         else : 
             self.fcf = y_financial_data['FreeCashFlow'][-3:].mean()
         
@@ -230,7 +249,7 @@ class Share():
         delta_t = relativedelta(y_financial_data.index[-1], y_financial_data.index[YEAR_G],)
         nb_years_fcf = delta_t.years + delta_t.months / 12
 
-        fcf_se_ratio = y_financial_data['FreeCashFlow'][-1]/y_financial_data['FreeCashFlow'][YEAR_G]
+        fcf_se_ratio = y_financial_data['FreeCashFlow'].iloc[-1]/y_financial_data['FreeCashFlow'].iloc[YEAR_G]
         if fcf_se_ratio < 0:
             self.mean_g_fcf = np.nan
         else :
@@ -240,8 +259,8 @@ class Share():
 
         nb_year_inc = delta_t.years + delta_t.months / 12
    
-        self.mean_g_tr = (y_financial_data['TotalRevenue'][-1]/y_financial_data['TotalRevenue'][YEAR_G])**(1/nb_year_inc) - 1
-        inc_se_ratio = y_financial_data['NetIncome'][-1]/y_financial_data['NetIncome'][YEAR_G]
+        self.mean_g_tr = (y_financial_data['TotalRevenue'].iloc[-1]/y_financial_data['TotalRevenue'].iloc[YEAR_G])**(1/nb_year_inc) - 1
+        inc_se_ratio = y_financial_data['NetIncome'].iloc[-1]/y_financial_data['NetIncome'].iloc[YEAR_G]
         if inc_se_ratio < 0 :
             self.mean_g_netinc = np.nan
         else : 
@@ -343,13 +362,13 @@ def resume_list(symbol_list : list[str | tuple], xl_outfile : str = None):
                                                 'roic' : [s.roic for s in share_list], 
                                                 'debt_ratio' : [s.debt_ratio for s in share_list],
                                                 'price_to_book' : [s.priceToBook for s in share_list] ,
-                                                'mean_g_fcf': [s.mean_g_fcf for s in share_list] , 
-                                                'mean_g_tr' : [s.mean_g_tr for s in share_list], 
-                                                'mean_g_inc' : [s.mean_g_netinc for s in share_list] 
+                                                # 'mean_g_fcf': [s.mean_g_fcf for s in share_list] , 
+                                                # 'mean_g_tr' : [s.mean_g_tr for s in share_list], 
+                                                # 'mean_g_inc' : [s.mean_g_netinc for s in share_list] 
                                                 })
 
 
-    df["diff_g"] = df['mean_g_tr'] - df['assumed_g']
+    # df["diff_g"] = df['mean_g_tr'] - df['assumed_g']
     col_letter = {c : letters[i+1] for i, c in enumerate(df.columns)}
     df.sort_values(by = ['assumed_g', 'debt_ratio']  , inplace= True, ascending= True)
 
@@ -374,7 +393,7 @@ def resume_list(symbol_list : list[str | tuple], xl_outfile : str = None):
     worksheet.set_column(f"{col_letter['capital_cost']}:{col_letter['assumed_g']}", 13, percent)
     worksheet.set_column(f"{col_letter['per']}:{col_letter['price_to_book']}", 13, number)
     worksheet.set_column(f"{col_letter['roic']}:{col_letter['roic']}", 13, percent )
-    worksheet.set_column(f"{col_letter['mean_g_fcf']}:{col_letter['diff_g']}", 13, percent )
+    # worksheet.set_column(f"{col_letter['mean_g_fcf']}:{col_letter['diff_g']}", 13, percent )
 
     # format assumed g
     worksheet.conditional_format(f"{col_letter['assumed_g']}2:{col_letter['assumed_g']}{len(df.index)+1}", 
@@ -403,8 +422,8 @@ def resume_list(symbol_list : list[str | tuple], xl_outfile : str = None):
                             'min_value' : 1, 'mid_value' : 50, "max_value" : 10, 'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
     
     #
-    worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format1})
-    worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": ">", "value": 0, "format": format2})
+    # worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format1})
+    # worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": ">", "value": 0, "format": format2})
     writer.close()
 
     if sys.platform == "linux" :

@@ -3,8 +3,10 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(script_dir)
 from dcf import *
 
+
 outfile = "/home/bertrand/Documents/dcf.xlsx"
 share_list = [
+    "ACA.PA", #credit agricole
     "OR.PA", #l'Oreal  
     "AAPL", 
     "GE",
@@ -56,7 +58,6 @@ share_list = [
     "TLW.L", # Tullow Oil
     "INTC",
     "SCI", 
-    "ACA.PA",
     'STMPA.PA', #stmicroelec
     "RWE.DE" ,
     "PYPL", #paypal
@@ -72,6 +73,8 @@ share_list = [
     "ENI.MI", # ENI
     "RI.PA",
     "FNAC.PA",
+    "CVX",
+    "XOM",
     "SU.PA",
     "8GC.F",
     "AMUN.PA",
@@ -90,12 +93,15 @@ share_list = [
     "MAU.PA",
     "EQNR",   # equinor  
     "DIS",
+    "SCR.PA",
       ]
 
 resume_list(share_list, outfile)
 # resume_list(["GLEN.L"])
 
+
 # share = Share("PBR")
+# share = Share("ACA.PA")
 # share.eval_g(2.6e9, True)
 # share = Share("TTE.PA")
 # share.eval_g( pr= True, )
