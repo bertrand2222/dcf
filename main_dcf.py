@@ -6,6 +6,7 @@ from dcf import *
 
 outfile = "/home/bertrand/Documents/dcf.xlsx"
 share_list = [
+    'GTT.PA',
     "ACA.PA", #credit agricole
     "OR.PA", #l'Oreal  
     "AAPL", 
@@ -53,23 +54,20 @@ share_list = [
     "DBG.PA",
     "BN.PA",
     "RR.L", # rolls royce
-    "AC.PA",
     "TSM",
     "TLW.L", # Tullow Oil
     "INTC",
     "SCI", 
     'STMPA.PA', #stmicroelec
     "RWE.DE" ,
-    "PYPL", #paypal
     "SW.PA",
     "SUBCY",
-    'GTT.PA',
     'PAH3.DE',
     'CRH',
     "ENGI.PA",
     "VK.PA",
     "ATE.PA",
-    "ALO.PA", # Alstom
+    #"ALO.PA", # Alstom
     "ENI.MI", # ENI
     "RI.PA",
     "FNAC.PA",
@@ -86,7 +84,6 @@ share_list = [
     "BMW.DE",
     "VOW.DE",
     "EC.PA", # total gabon
-    "ETL.PA", # eutelsat
     "VRLA.PA", # veralia
     "SII.PA", 
     "RXL.PA",
@@ -94,9 +91,13 @@ share_list = [
     "EQNR",   # equinor  
     "DIS",
     "SCR.PA",
+    "CLIQ.F",
       ]
 
-resume_list(share_list, outfile)
+share_list_1 = ["CLIQ.F"]
+dcf_anal = DCF_anal()
+dcf_anal.load_df()
+print(dcf_anal.df)
 # resume_list(["GLEN.L"])
 
 

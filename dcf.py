@@ -17,6 +17,7 @@ import subprocess
 import sys
 # import pandas as pd
 
+PKL_PATH = "df_save.pkl"
 IS = 0.25
 NB_YEAR_DCF = 5
 HISTORY_TIME = 5 
@@ -102,7 +103,7 @@ class Share():
 
     def eval_beta(self) :
 
-        regular_history = self.history[:-1]
+        regular_history = self.history.iloc[:-1]
 
      
         if self.price_currency != MARKET_CURRENCY :
@@ -130,7 +131,7 @@ class Share():
         print('\rquerry {}    '.format(self.symbol), flush=True, end="")
 
         self.history = self.tk.history(period = '5y', interval= "1mo").loc[self.symbol]['adjclose']
-        self.currentprice = self.history[-1]
+        self.currentprice = self.history.iloc[-1]
 
         if not self.symbol in share_profile_dic :
 
@@ -187,21 +188,25 @@ class Share():
             self.currentprice *= rate
             self.marketCap *= rate
         
-        self.compute_financial_info(pr = pr)
+        if (self.compute_financial_info(pr = pr)) : return(1)
         return(0)
 
     def compute_financial_info(self, pr = True) :
 
         y_financial_data = self.y_financial_data
         q_financial_data =  self.q_financial_data
-        
+
         last_financial_info =  y_financial_data.iloc[-1]
      
         self.nb_shares = int(self.marketCap / self.currentprice)
         stockEquity = last_financial_info['CommonStockEquity']
         marketCap = self.marketCap
         self.capital_cost = free_risk_rate + self.beta * (market_rate - free_risk_rate)
-        totalDebt = last_financial_info['TotalDebt']
+        try :
+            totalDebt = last_financial_info['TotalDebt']
+        except KeyError:
+            print("no total debt available for {}".format(self.short_name))
+            return(1)
         self.cmpc = self.capital_cost * stockEquity/(totalDebt + stockEquity) + debt_cost * (1-IS) * totalDebt/(totalDebt + stockEquity)
         self.netDebt = totalDebt - last_financial_info['CashAndCashEquivalents']
 
@@ -233,7 +238,7 @@ class Share():
 
         # elif y_financial_data['FreeCashFlow'].iloc[-1] == y_financial_data['FreeCashFlow'].iloc[-2] : 
         elif self.unknown_last_fcf :
-            print("free cash flow inconnu") 
+            print("unknown last free cash flow  for {}".format(self.short_name)) 
             self.fcf = y_financial_data['FreeCashFlow'][-4:-1].mean()
 
         else : 
@@ -294,7 +299,7 @@ class Share():
 
         if self.cmpc is None :
             if self.querry_financial_info(pr = pr) : return(np.nan)
-
+                
         if self.cmpc < 0:
             print("negative cmpc for {} can not compute DCF".format(self.short_name))
             return np.nan
@@ -345,103 +350,122 @@ def get_dcf_(g, *data):
     # return ((enterpriseValue - netDebt)/ share.marketCap - 1)**2
     return (enterpriseValue / share.netMarketCap - 1)**2
 
-def resume_list(symbol_list : list[str | tuple], xl_outfile : str = None):
-    share_list = [Share(sym) for sym in symbol_list]
-    g_l = [s.eval_g() for s in share_list]
-    
-    with open(SHARE_PROFILE_FILE, "w") as outfile :
-        json.dump(share_profile_dic, outfile, indent = 4)
-        outfile.close() 
-    df = pd.DataFrame(index= symbol_list, data= {'short_name' : [s.short_name for s in share_list] ,
-                                                'current_price' : [s.currentprice for s in share_list],
-                                                'currency' : [s.financial_currency for s in share_list],
-                                                'capital_cost' :[s.capital_cost for s in share_list],
-                                                'cmpc' :[s.cmpc for s in share_list],
-                                                'assumed_g' : g_l ,  
-                                                'per' :  [s.per for s in share_list ],
-                                                'roic' : [s.roic for s in share_list], 
-                                                'debt_ratio' : [s.debt_ratio for s in share_list],
-                                                'price_to_book' : [s.priceToBook for s in share_list] ,
-                                                # 'mean_g_fcf': [s.mean_g_fcf for s in share_list] , 
-                                                # 'mean_g_tr' : [s.mean_g_tr for s in share_list], 
-                                                # 'mean_g_inc' : [s.mean_g_netinc for s in share_list] 
-                                                })
+
+class DCF_anal():
+
+    def __init__(self, symbol_list : list[str | tuple] = []) -> None:
+
+        self.symbol_list = symbol_list
+        self.share_list = [Share(sym) for sym in symbol_list]
+      
+
+    def resume_list(self) :
+        
+        share_list = self.share_list
+        g_l = [s.eval_g() for s in share_list]
+        
+        with open(SHARE_PROFILE_FILE, "w") as outfile :
+            json.dump(share_profile_dic, outfile, indent = 4)
+            outfile.close() 
+        df = pd.DataFrame(index= self.symbol_list, data= {'short_name' : [s.short_name for s in share_list] ,
+                                                    'current_price' : [s.currentprice for s in share_list],
+                                                    'currency' : [s.financial_currency for s in share_list],
+                                                    'capital_cost' :[s.capital_cost for s in share_list],
+                                                    'cmpc' :[s.cmpc for s in share_list],
+                                                    'assumed_g' : g_l ,  
+                                                    'per' :  [s.per for s in share_list ],
+                                                    'roic' : [s.roic for s in share_list], 
+                                                    'debt_ratio' : [s.debt_ratio for s in share_list],
+                                                    'price_to_book' : [s.priceToBook for s in share_list] ,
+                                                    # 'mean_g_fcf': [s.mean_g_fcf for s in share_list] , 
+                                                    # 'mean_g_tr' : [s.mean_g_tr for s in share_list], 
+                                                    # 'mean_g_inc' : [s.mean_g_netinc for s in share_list] 
+                                                    })
 
 
-    # df["diff_g"] = df['mean_g_tr'] - df['assumed_g']
-    col_letter = {c : letters[i+1] for i, c in enumerate(df.columns)}
-    df.sort_values(by = ['assumed_g', 'debt_ratio']  , inplace= True, ascending= True)
+        # df["diff_g"] = df['mean_g_tr'] - df['assumed_g']
+        df.sort_values(by = ['assumed_g', 'debt_ratio']  , inplace= True, ascending= True)
 
+        self.df = df
+        df.to_pickle(PKL_PATH)
 
-   
-    writer = pd.ExcelWriter(xl_outfile,  engine="xlsxwriter")
-    df.to_excel(writer, sheet_name= "dcf")
-    wb = writer.book
-    number = wb.add_format({'num_format': '0.00'})
-    percent = wb.add_format({'num_format': '0.00%'})
-    # Add a format. Light red fill with dark red text.
-    format1 = wb.add_format({"bg_color": "#FFC7CE", "font_color": "#9C0006"})
-    # Add a format. Green fill with dark green text.
-    format2 = wb.add_format({"bg_color": "#C6EFCE", "font_color": "#006100"})
-    # Add a format. Light red fill .
-    format3 = wb.add_format({"bg_color": "#F8696B",})
+    def load_df(self):
+        self.df = pd.read_pickle(PKL_PATH)
+        self.share_list = self.df.index
 
-    worksheet = writer.sheets['dcf']
-    worksheet.add_table(0,0,len(df.index),len(df.columns)  , {"columns" : [{'header' : 'symbol'}] + [{'header' : col} for col in df.columns], 'style' : 'Table Style Light 8'})
-    worksheet.set_column('B:B', 20, )
-    worksheet.set_column(f"{col_letter['current_price']}:{col_letter['current_price']}", 13, number)
-    worksheet.set_column(f"{col_letter['capital_cost']}:{col_letter['assumed_g']}", 13, percent)
-    worksheet.set_column(f"{col_letter['per']}:{col_letter['price_to_book']}", 13, number)
-    worksheet.set_column(f"{col_letter['roic']}:{col_letter['roic']}", 13, percent )
-    # worksheet.set_column(f"{col_letter['mean_g_fcf']}:{col_letter['diff_g']}", 13, percent )
+    def export(self, xl_outfile : str = None):
 
-    # format assumed g
-    worksheet.conditional_format(f"{col_letter['assumed_g']}2:{col_letter['assumed_g']}{len(df.index)+1}", 
-                                 {"type": "3_color_scale", 'min_type': 'num','max_type': 'max', 'mid_type' : 'percentile',
-                            'min_value' : -0.2, 'mid_value' : 50,  'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
-    
-    # format debt ratio
-    worksheet.conditional_format(f"{col_letter['debt_ratio']}2:{col_letter['debt_ratio']}{len(df.index)+1}", 
-                                 {"type": "3_color_scale", 'min_type': 'num','max_type': 'num', 'mid_type' : 'percentile',
-                            'min_value' : 0, 'mid_value' : 50, "max_value" : 2, 'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
-    # format PER
-    worksheet.conditional_format(f"{col_letter['per']}2:{col_letter['per']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format3})
-    worksheet.conditional_format(f"{col_letter['per']}2:{col_letter['per']}{len(df.index)+1}", 
-                                 {"type": "3_color_scale", 'min_type': 'num','max_type': 'num', 'mid_type' : 'percentile',
-                            'min_value' : 3, 'mid_value' : 50, "max_value" : 50, 'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
-    # format ROIC
-    worksheet.conditional_format(f"{col_letter['roic']}2:{col_letter['roic']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format3})
-    worksheet.conditional_format(f"{col_letter['roic']}2:{col_letter['roic']}{len(df.index)+1}", 
-                                 {"type": "3_color_scale", 'min_type': 'num','max_type': 'num', 'mid_type' : 'percentile',
-                            'min_value' : 0, 'mid_value' : 50, "max_value" : 0.15, "min_color" : '#F8696B', 'max_color' : '#63BE7B' , "mid_color" : "#FFFFFF"})
+        self.xl_outfile = xl_outfile
+        writer = pd.ExcelWriter(xl_outfile,  engine="xlsxwriter")
+        df = self.df
+        col_letter = {c : letters[i+1] for i, c in enumerate(df.columns)}
+        df.to_excel(writer, sheet_name= "dcf")
+        wb = writer.book
+        number = wb.add_format({'num_format': '0.00'})
+        percent = wb.add_format({'num_format': '0.00%'})
+        # Add a format. Light red fill with dark red text.
+        format1 = wb.add_format({"bg_color": "#FFC7CE", "font_color": "#9C0006"})
+        # Add a format. Green fill with dark green text.
+        format2 = wb.add_format({"bg_color": "#C6EFCE", "font_color": "#006100"})
+        # Add a format. Light red fill .
+        format3 = wb.add_format({"bg_color": "#F8696B",})
 
-    # format Price to Book
-    worksheet.conditional_format(f"{col_letter['price_to_book']}2:{col_letter['price_to_book']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format3})
-    worksheet.conditional_format(f"{col_letter['price_to_book']}2:{col_letter['price_to_book']}{len(df.index)+1}", 
-                                 {"type": "3_color_scale", 'min_type': 'num','max_type': 'num', 'mid_type' : 'percentile',
-                            'min_value' : 1, 'mid_value' : 50, "max_value" : 10, 'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
-    
-    #
-    # worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format1})
-    # worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": ">", "value": 0, "format": format2})
-    writer.close()
+        worksheet = writer.sheets['dcf']
+        worksheet.add_table(0,0,len(df.index),len(df.columns)  , {"columns" : [{'header' : 'symbol'}] + [{'header' : col} for col in df.columns], 'style' : 'Table Style Light 8'})
+        worksheet.set_column('B:B', 30, )
+        worksheet.set_column(f"{col_letter['current_price']}:{col_letter['current_price']}", 13, number)
+        worksheet.set_column(f"{col_letter['capital_cost']}:{col_letter['assumed_g']}", 13, percent)
+        worksheet.set_column(f"{col_letter['per']}:{col_letter['price_to_book']}", 13, number)
+        worksheet.set_column(f"{col_letter['roic']}:{col_letter['roic']}", 13, percent )
+        # worksheet.set_column(f"{col_letter['mean_g_fcf']}:{col_letter['diff_g']}", 13, percent )
 
-    if sys.platform == "linux" :
-        subprocess.call(["open", xl_outfile])
-    else :
-        os.startfile(xl_outfile)
-    
-    # valss = df.values.tolist()
-    # for vals in valss:
-    #     vals[1] = f"{vals[1]:.2f}"
-    #     for i in range(6,len(vals)):
-    #         if isinstance(vals[i], str) :
-    #             continue
-    #         vals[i] = f"{Fore.GREEN}{vals[i]:.2%}{Fore.RESET}" if vals[i] >=0 else f"{Fore.RED}{vals[i]:.2%}{Fore.RESET}"
+        # format assumed g
+        worksheet.conditional_format(f"{col_letter['assumed_g']}2:{col_letter['assumed_g']}{len(df.index)+1}", 
+                                    {"type": "3_color_scale", 'min_type': 'num','max_type': 'max', 'mid_type' : 'percentile',
+                                'min_value' : -0.2, 'mid_value' : 50,  'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
+        
+        # format debt ratio
+        worksheet.conditional_format(f"{col_letter['debt_ratio']}2:{col_letter['debt_ratio']}{len(df.index)+1}", 
+                                    {"type": "3_color_scale", 'min_type': 'num','max_type': 'num', 'mid_type' : 'percentile',
+                                'min_value' : 0, 'mid_value' : 50, "max_value" : 2, 'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
+        # format PER
+        worksheet.conditional_format(f"{col_letter['per']}2:{col_letter['per']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format3})
+        worksheet.conditional_format(f"{col_letter['per']}2:{col_letter['per']}{len(df.index)+1}", 
+                                    {"type": "3_color_scale", 'min_type': 'num','max_type': 'num', 'mid_type' : 'percentile',
+                                'min_value' : 3, 'mid_value' : 50, "max_value" : 50, 'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
+        # format ROIC
+        worksheet.conditional_format(f"{col_letter['roic']}2:{col_letter['roic']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format3})
+        worksheet.conditional_format(f"{col_letter['roic']}2:{col_letter['roic']}{len(df.index)+1}", 
+                                    {"type": "3_color_scale", 'min_type': 'num','max_type': 'num', 'mid_type' : 'percentile',
+                                'min_value' : 0, 'mid_value' : 50, "max_value" : 0.15, "min_color" : '#F8696B', 'max_color' : '#63BE7B' , "mid_color" : "#FFFFFF"})
 
-    # table = tabulate(valss, headers= df.columns, showindex= list(df.index), stralign= "right") 
-    # print("\r")
-    # print(table)
+        # format Price to Book
+        worksheet.conditional_format(f"{col_letter['price_to_book']}2:{col_letter['price_to_book']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format3})
+        worksheet.conditional_format(f"{col_letter['price_to_book']}2:{col_letter['price_to_book']}{len(df.index)+1}", 
+                                    {"type": "3_color_scale", 'min_type': 'num','max_type': 'num', 'mid_type' : 'percentile',
+                                'min_value' : 1, 'mid_value' : 50, "max_value" : 10, 'min_color' : '#63BE7B', "max_color" : '#F8696B', "mid_color" : "#FFFFFF"})
+        
+        #
+        # worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": "<", "value": 0, "format": format1})
+        # worksheet.conditional_format(f"{col_letter['mean_g_fcf']}2:{col_letter['diff_g']}{len(df.index)+1}", {"type": "cell", "criteria": ">", "value": 0, "format": format2})
+        writer.close()
+
+        if sys.platform == "linux" :
+            subprocess.call(["open", xl_outfile])
+        else :
+            os.startfile(xl_outfile)
+        
+        # valss = df.values.tolist()
+        # for vals in valss:
+        #     vals[1] = f"{vals[1]:.2f}"
+        #     for i in range(6,len(vals)):
+        #         if isinstance(vals[i], str) :
+        #             continue
+        #         vals[i] = f"{Fore.GREEN}{vals[i]:.2%}{Fore.RESET}" if vals[i] >=0 else f"{Fore.RED}{vals[i]:.2%}{Fore.RESET}"
+
+        # table = tabulate(valss, headers= df.columns, showindex= list(df.index), stralign= "right") 
+        # print("\r")
+        # print(table)
 
 
 
