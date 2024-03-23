@@ -95,10 +95,11 @@ share_list = [
       ]
 
 share_list_1 = ["CLIQ.F"]
-dcf_anal = DCF_anal()
+dcf_anal = DCF_anal(share_list)
+# dcf_anal.resume_list()
 dcf_anal.load_df()
-print(dcf_anal.df)
-# resume_list(["GLEN.L"])
+dcf_anal.export(outfile)
+
 
 
 # share = Share("PBR")
