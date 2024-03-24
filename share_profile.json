@@ -354,5 +354,9 @@
     "DIS": {
         "short_name": "The Walt Disney Company (DIS)",
         "price_currency": "USD"
+    },
+    "CLIQ.F": {
+        "short_name": "Cliq Digital AG (CLIQ.F)",
+        "price_currency": "EUR"
     }
 }

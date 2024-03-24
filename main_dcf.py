@@ -3,8 +3,9 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(script_dir)
 from dcf import *
 
+from datetime import date
 
-outfile = "/home/bertrand/Documents/dcf.xlsx"
+outfile = "/home/bertrand/Documents/rdcf.xlsx"
 share_list = [
     'GTT.PA',
     "ACA.PA", #credit agricole
@@ -94,11 +95,13 @@ share_list = [
     "CLIQ.F",
       ]
 
-share_list_1 = ["CLIQ.F"]
+
+# share_list_1 = ["CLIQ.F"]
 dcf_anal = DCF_anal(share_list)
-# dcf_anal.resume_list()
-dcf_anal.load_df()
-dcf_anal.export(outfile)
+dcf_anal.resume_list()
+dcf_anal.to_excel(outfile)
+upload_file(outfile)
+# dcf_anal.load_df()
 
 
 

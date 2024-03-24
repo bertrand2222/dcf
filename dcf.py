@@ -5,7 +5,7 @@ from scipy.optimize import minimize_scalar
 import pandas as pd
 from colorama import Fore
 from dateutil.relativedelta import relativedelta
-from datetime import timedelta
+from datetime import date
 import os
 import requests
 from lxml import html
@@ -15,7 +15,16 @@ urllib3.disable_warnings()
 import json
 import subprocess
 import sys
+import google.auth
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+
 # import pandas as pd
+SCOPES =  ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
 PKL_PATH = "df_save.pkl"
 IS = 0.25
@@ -25,61 +34,60 @@ YEAR_G = 0
 INCOME_INFOS = [ 'FreeCashFlow','TotalRevenue', "NetIncome",  ]
 BALANCE_INFOS = ['currencyCode', 'TotalDebt', 'CashAndCashEquivalents', 'CommonStockEquity', "InvestedCapital", "ShareIssued"]
 TYPES = INCOME_INFOS + BALANCE_INFOS
-letters = list(ascii_uppercase)
-headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0'}
+MARKET_CURRENCY = "USD"
+
+BROWSER_HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0'}
 
 ### get fed fund rate (debt cost)
-url_fed_fund_rate = "https://ycharts.com/indicators/effective_federal_funds_rate"
-xpath_fed_fund_rate = "/html/body/main/div/div[4]/div/div/div/div/div[2]/div[1]/div[3]/div[2]/div/div[1]/table/tbody/tr[1]/td[2]"
-
-r = requests.get(url_fed_fund_rate, verify= False, headers= headers)
-text_fed_fund_rate = html.fromstring(r.content).xpath(xpath_fed_fund_rate)[0].text
-debt_cost = float(text_fed_fund_rate.strip("%")) / 100
-
-### get free risk rate
-
-free_risk_rate = yq.Ticker("^TNX").history(period = '1y', ).loc["^TNX"]["close"].iloc[-1] /100 #us treasury ten years yield
-
-### eval market rate
-MARKET_CURRENCY = "USD"
-sptr_6y = yq.Ticker("^SP500TR").history(period = '6y', interval= "1mo").loc["^SP500TR"]
-sptr_6y_rm = sptr_6y.rolling(2).mean()
-# sptr = yq.Ticker("^SP500TR").history(period = '5y', interval= "1mo").loc["^SP500TR"]
-# past_date = sptr.index[0]
-# last_date = sptr.index[-2]
-
-last_date = sptr_6y.index[-2]
-timeDelta = HISTORY_TIME
-past_date = last_date - relativedelta(years = timeDelta)
-sptr = sptr_6y.loc[past_date:]
-sptr_rm = sptr_6y_rm.loc[past_date:]
+URL_FED_FUND_RATE = "https://ycharts.com/indicators/effective_federal_funds_rate"
+XPATH_FED_FUND_RATE = "/html/body/main/div/div[4]/div/div/div/div/div[2]/div[1]/div[3]/div[2]/div/div[1]/table/tbody/tr[1]/td[2]"
 
 
-# delta = relativedelta(last_date, past_date)
-# timeDelta = delta.years + delta.months / 12 + delta.days / 365
-market_rate =  (sptr_rm.loc[last_date]['close'] / sptr_rm.loc[past_date]['close'])**(1/timeDelta) - 1 # S&P 500 mean year rate over 5 years
-
-print("debt cost = {}%".format(debt_cost*100))
-print("free risk rate = {0:.2f}%".format(free_risk_rate*100))
-print("market rate = {0:.2f}%".format(market_rate*100))
-
-month_change_rate = sptr["adjclose"][:-1].pct_change(periods = 1).rename('rm')
-var_rm = month_change_rate.var()
-
-# rate history
-rate_history_dic = {}
-rate_current_dic = {}
-
-# share profile
 SHARE_PROFILE_FILE = 'share_profile.json'
-if os.path.isfile(SHARE_PROFILE_FILE) :
-    with open(SHARE_PROFILE_FILE, "r") as file :
-        share_profile_dic = json.load(file)
-        file.close()
-else :
-    share_profile_dic = {}
+
+
+class MarketInfos():
+
+    def __init__(self) -> None:
+
+        r = requests.get(URL_FED_FUND_RATE, verify= False, headers= BROWSER_HEADERS)
+        text_fed_fund_rate = html.fromstring(r.content).xpath(XPATH_FED_FUND_RATE)[0].text
+
+        ### get debt cost
+        self.debt_cost = float(text_fed_fund_rate.strip("%")) / 100
+        print("debt cost = {}%".format(self.debt_cost*100))
+
+        ### get free risk rate
+        self.free_risk_rate = yq.Ticker("^TNX").history(period = '1y', ).loc["^TNX"]["close"].iloc[-1] /100 #us treasury ten years yield
+        print("free risk rate = {0:.2f}%".format(self.free_risk_rate*100))
+     
+        ### eval market rate
+        sptr_6y = yq.Ticker("^SP500TR").history(period = '6y', interval= "1mo").loc["^SP500TR"]
+        sptr_6y_rm = sptr_6y.rolling(2).mean()
+        # sptr = yq.Ticker("^SP500TR").history(period = '5y', interval= "1mo").loc["^SP500TR"]
+
+        last_date = sptr_6y.index[-2]
+        timeDelta = HISTORY_TIME
+        past_date = last_date - relativedelta(years = timeDelta)
+        sptr = sptr_6y.loc[past_date:]
+        sptr_rm = sptr_6y_rm.loc[past_date:]
+
+        # delta = relativedelta(last_date, past_date)
+        # timeDelta = delta.years + delta.months / 12 + delta.days / 365
+        self.market_rate =  (sptr_rm.loc[last_date]['close'] / sptr_rm.loc[past_date]['close'])**(1/timeDelta) - 1 # S&P 500 mean year rate over 5 years
+        print("market rate = {0:.2f}%".format(self.market_rate*100))
+
+        self.month_change_rate = sptr["adjclose"][:-1].pct_change(periods = 1).rename('rm')
+        self.var_rm = self.month_change_rate.var()
+
+        # rate history
+        self.rate_history_dic = {}
+        self.rate_current_dic = {}
+
+        # share profile
+
 class Share():
-    def __init__(self, isin : str, source : str = "yahoo" ) -> None:
+    def __init__(self, isin : str, source : str = "yahoo", market_infos : MarketInfos = None, shares_profile : dict = None ) -> None:
         self.isin = isin
         self.symbol = None
         if source == "yahoo" :
@@ -100,11 +108,14 @@ class Share():
         self.mean_g_netinc = None
         self.capital_cost = None
         self.roic = np.nan
+        self.market_infos = market_infos
+        self.shares_profile = shares_profile
 
     def eval_beta(self) :
 
         regular_history = self.history.iloc[:-1]
-
+        rate_history_dic = self.market_infos.rate_history_dic
+        rate_current_dic = self.market_infos.rate_current_dic
      
         if self.price_currency != MARKET_CURRENCY :
             change_rate = self.price_currency + MARKET_CURRENCY + "=X"
@@ -117,9 +128,9 @@ class Share():
      
         month_change_share = regular_history.pct_change().rename("share")
        
-        cov_df = pd.concat([month_change_rate, month_change_share], axis = 1, join= 'inner',).dropna(how = 'any')
+        cov_df = pd.concat([self.market_infos.month_change_rate, month_change_share], axis = 1, join= 'inner',).dropna(how = 'any')
         cov = cov_df.cov()['rm'].loc['share']
-        beta = cov/ var_rm
+        beta = cov/ self.market_infos.var_rm
         self.beta = beta
 
         return beta
@@ -133,21 +144,21 @@ class Share():
         self.history = self.tk.history(period = '5y', interval= "1mo").loc[self.symbol]['adjclose']
         self.currentprice = self.history.iloc[-1]
 
-        if not self.symbol in share_profile_dic :
+        if not self.symbol in self.shares_profile :
 
             url_yahoo = "https://finance.yahoo.com/quote/{0}?p={0}".format(self.symbol)
 
             short_name_xpath = '//*[@id="quote-header-info"]/div[2]/div[1]/div[1]/h1'
             currency_xpath = '//*[@id="quote-header-info"]/div[2]/div[1]/div[2]/span'
             
-            r = requests.get(url_yahoo, verify= False, headers= headers, )
+            r = requests.get(url_yahoo, verify= False, headers= BROWSER_HEADERS, )
             self.short_name = html.fromstring(r.content).xpath(short_name_xpath)[0].text
             self.price_currency = html.fromstring(r.content).xpath(currency_xpath)[0].text.split()[-1].strip(')')
-            share_profile_dic[self.symbol] = { "short_name" : self.short_name , "price_currency" : self.price_currency }
+            self.shares_profile[self.symbol] = { "short_name" : self.short_name , "price_currency" : self.price_currency }
         
         else :
-            self.short_name = share_profile_dic[self.symbol]["short_name"]
-            self.price_currency = share_profile_dic[self.symbol]["price_currency"]
+            self.short_name = self.shares_profile[self.symbol]["short_name"]
+            self.price_currency = self.shares_profile[self.symbol]["price_currency"]
         # price = tk.price[self.symbol]
         # if('Quote not found' in price) :
         #     print(price)
@@ -155,8 +166,6 @@ class Share():
         # self.price_currency = price['currency'] 
         # self.short_name = price["shortName"]
         # self.marketCap = price['marketCap']
-        
-    
         
         # print(self.tk.get_financial_data(TYPES,))
         self.y_financial_data : pd.DataFrame = tk.get_financial_data(TYPES,)
@@ -180,6 +189,8 @@ class Share():
         financial_currency = self.y_financial_data['currencyCode'].iloc[-1]
         
         if self.price_currency != financial_currency:
+
+            rate_current_dic = self.market_infos.rate_current_dic
             rate_symb = self.price_currency + financial_currency + "=X"
             if rate_symb not in rate_current_dic:
                 rate_tk = yq.Ticker(rate_symb)
@@ -192,7 +203,9 @@ class Share():
         return(0)
 
     def compute_financial_info(self, pr = True) :
-
+        
+        free_risk_rate = self.market_infos.free_risk_rate
+        market_rate = self.market_infos.market_rate
         y_financial_data = self.y_financial_data
         q_financial_data =  self.q_financial_data
 
@@ -207,7 +220,7 @@ class Share():
         except KeyError:
             print("no total debt available for {}".format(self.short_name))
             return(1)
-        self.cmpc = self.capital_cost * stockEquity/(totalDebt + stockEquity) + debt_cost * (1-IS) * totalDebt/(totalDebt + stockEquity)
+        self.cmpc = self.capital_cost * stockEquity/(totalDebt + stockEquity) + self.market_infos.debt_cost * (1-IS) * totalDebt/(totalDebt + stockEquity)
         self.netDebt = totalDebt - last_financial_info['CashAndCashEquivalents']
 
 
@@ -355,8 +368,17 @@ class DCF_anal():
 
     def __init__(self, symbol_list : list[str | tuple] = []) -> None:
 
+        self.market_infos = MarketInfos()
         self.symbol_list = symbol_list
-        self.share_list = [Share(sym) for sym in symbol_list]
+
+        if os.path.isfile(SHARE_PROFILE_FILE) :
+            with open(SHARE_PROFILE_FILE, "r") as file :
+                self.shares_profile = json.load(file)
+                file.close()
+        else :
+            self.shares_profile = {}
+
+        self.share_list = [Share(sym, market_infos= self.market_infos, shares_profile= self.shares_profile) for sym in symbol_list]
       
 
     def resume_list(self) :
@@ -365,7 +387,7 @@ class DCF_anal():
         g_l = [s.eval_g() for s in share_list]
         
         with open(SHARE_PROFILE_FILE, "w") as outfile :
-            json.dump(share_profile_dic, outfile, indent = 4)
+            json.dump(self.shares_profile, outfile, indent = 4)
             outfile.close() 
         df = pd.DataFrame(index= self.symbol_list, data= {'short_name' : [s.short_name for s in share_list] ,
                                                     'current_price' : [s.currentprice for s in share_list],
@@ -393,13 +415,14 @@ class DCF_anal():
         self.df = pd.read_pickle(PKL_PATH)
         self.share_list = self.df.index
 
-    def export(self, xl_outfile : str = None):
+    def to_excel(self, xl_outfile : str = None):
 
+        letters = list(ascii_uppercase)
         self.xl_outfile = xl_outfile
         writer = pd.ExcelWriter(xl_outfile,  engine="xlsxwriter")
         df = self.df
         col_letter = {c : letters[i+1] for i, c in enumerate(df.columns)}
-        df.to_excel(writer, sheet_name= "dcf")
+        df.to_excel(writer, sheet_name= "rdcf")
         wb = writer.book
         number = wb.add_format({'num_format': '0.00'})
         percent = wb.add_format({'num_format': '0.00%'})
@@ -467,6 +490,51 @@ class DCF_anal():
         # print("\r")
         # print(table)
 
+def upload_file(outfile):
+    """Insert new file.
+    Returns : Id's of the file uploaded
 
+    """
+    creds = None
+    # The file token.json stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists("token.json"):
+        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                "credentials.json", SCOPES
+            )
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open("token.json", "w") as token:
+            token.write(creds.to_json())
+
+    try:
+        # create drive api client
+        service = build("drive", "v3", credentials=creds)
+
+        name = "rdcf_"+ str(date.today())
+        file_metadata = {"name": name}
+        media = MediaFileUpload(outfile)
+        # pylint: disable=maybe-no-member
+
+        print("upload {}.xlsx to google drive".format(name))
+        file = (
+            service.files()
+            .create(body=file_metadata, media_body=media, fields="id")
+            .execute()
+        )
+        print(f'File ID: {file.get("id")}')
+
+    except HttpError as error:
+        print(f"An error occurred: {error}")
+        file = None
+
+    return file.get("id")
 
 
