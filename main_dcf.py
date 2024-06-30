@@ -1,17 +1,20 @@
 import sys, os
 script_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(script_dir)
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 from dcf import *
 
 from datetime import date
 
-outfile = "/home/bertrand/Documents/rdcf.xlsx"
+outfile = os.path.join(os.environ["USERPROFILE"], r"Documents\rdcf.xlsx")
+
 share_list = [
+    "TTE.PA",
+    "RMS.PA", #hermes
     'GTT.PA',
     "ACA.PA", #credit agricole
     "OR.PA", #l'Oreal  
-    "AAPL", 
-    "GE",
     "TE.PA", #technip energie
     "RUI.PA",
     "BNP.PA",
@@ -26,11 +29,9 @@ share_list = [
     "CARL-B.CO",
     "TEP.PA", #teleperformance
     "AMZN", #AMZN  
-    "TTE",
     "SPM.MI",
     "SAF.PA", #Safran
     "PBR",
-    "RMS.PA", #hermes
     "AKE.PA",
     "NVDA",
     "SAN.PA", # sanofi
@@ -44,7 +45,7 @@ share_list = [
     "CS.PA", #Axa 
     "FGR.PA", #eiffage
     "GOOG",
-    "CA.PA", #carrefour
+    # "CA.PA", #carrefour
     "META",
     "AIR.PA", #Airbus
     "CAP.PA", #capgemi
@@ -67,8 +68,7 @@ share_list = [
     'CRH',
     "ENGI.PA",
     "VK.PA",
-    "ATE.PA",
-    #"ALO.PA", # Alstom
+    "RELIANCE.NS",
     "ENI.MI", # ENI
     "RI.PA",
     "FNAC.PA",
@@ -77,7 +77,6 @@ share_list = [
     "SU.PA",
     "8GC.F",
     "AMUN.PA",
-    "HEIA.AS",
     "8058.T",
     "8002.T",
     "BAC",
@@ -86,22 +85,29 @@ share_list = [
     "VOW.DE",
     "EC.PA", # total gabon
     "VRLA.PA", # veralia
-    "SII.PA", 
     "RXL.PA",
     "MAU.PA",
     "EQNR",   # equinor  
     "DIS",
     "SCR.PA",
     "CLIQ.F",
+    "TM", # Toyota
+    "SMSN.IL", #samsung electronic
+    "1211.HK", # BYD co electric car
+    "6501.T",  # Hitachi 
+    "AAPL"
       ]
 
 
-# share_list_1 = ["CLIQ.F"]
-dcf_anal = DCF_anal(share_list)
+# share_list_1 = ["MSFT"]
+# dcf_anal = DCFAnal(share_list_1)
+
+dcf_anal = DCFAnal(share_list)
 dcf_anal.resume_list()
-dcf_anal.to_excel(outfile)
-upload_file(outfile)
 # dcf_anal.load_df()
+
+dcf_anal.to_excel(outfile)
+# upload_file(outfile)
 
 
 
