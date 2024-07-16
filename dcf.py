@@ -33,7 +33,8 @@ HISTORY_TIME = 5
 YEAR_G = 0
 INCOME_INFOS = [ 'FreeCashFlow','TotalRevenue', "NetIncome",  ]
 BALANCE_INFOS = ['currencyCode', 'TotalDebt', 'CashAndCashEquivalents',
-                 'CommonStockEquity', "InvestedCapital", "ShareIssued", "MarketCap"]
+                 'CommonStockEquity', "InvestedCapital",  "BasicAverageShares"]
+
 TYPES = INCOME_INFOS + BALANCE_INFOS
 MARKET_CURRENCY = "USD"
 
@@ -119,6 +120,7 @@ class Share():
             self.symbol = isin
         self.source = source
         self.fcf : float = None
+        self.fcf_last : float = None
         self.cmpc = None
         self.mean_g_fcf = None
         self.net_debt = None
@@ -142,8 +144,10 @@ class Share():
         self.nb_shares = None
         self.market_cap = None
         self.net_market_cap = None
-        self.g = None
-        self.financial_currency_history = None
+        self.g = np.nan
+        self.g_last = np.nan
+        self.financial_currency_price_history = None
+        self.df_multiple = None
 
     def eval_beta(self) :
         """
@@ -191,6 +195,8 @@ class Share():
         tk = yq.Ticker(self.symbol)
         self.tk = tk
         print(f'\rquerry {self.symbol}    ', flush=True, end="")
+        if self.market_infos is None :
+            self.market_infos = MarketInfos()
 
         try :
             self.history = self.tk.history(period = '5y', interval= "1mo").loc[self.symbol][['close', 'adjclose']]
@@ -200,6 +206,7 @@ class Share():
         self.currentprice = self.history['adjclose'].iloc[-1]
 
         price = tk.price[self.symbol]
+        
         try :
             self.price_currency = price['currency']
             self.short_name = price["shortName"]
@@ -209,38 +216,47 @@ class Share():
             print(f"price data not availlable from api for {self.symbol}")
             self.querry_price_from_web()
 
+        
 
-        # print(self.tk.get_financial_data(TYPES,))
         self.y_financial_data : pd.DataFrame = tk.get_financial_data(TYPES,)
+        self.financial_currency = self.y_financial_data.dropna(subset="FreeCashFlow")["currencyCode"].value_counts().idxmax()
+        self.y_financial_data = self.y_financial_data.sort_values(by = ['asOfDate' , 'BasicAverageShares'], ascending=[1, 0])
         # print(self.y_financial_data)
-        # print(tk.valuation_measures)
-        # stop
+
+        self.y_financial_data['BasicAverageShares'] = self.y_financial_data['BasicAverageShares'].ffill(axis = 0, )
+        self.y_financial_data = self.y_financial_data.loc[self.y_financial_data['currencyCode'] == self.financial_currency ]
+
         self.unknown_last_fcf = np.isnan(self.y_financial_data["FreeCashFlow"].iloc[-1])
+        
         self.y_financial_data = self.y_financial_data.ffill(axis = 0
                                                             ).drop_duplicates(
-                                                                subset = 'asOfDate',
+                                                                subset = ['asOfDate', ],
                                                                 keep= 'last').set_index('asOfDate')
+      
+
         self.q_financial_data = tk.get_financial_data(TYPES , frequency= "q",
                                                       trailing= False).set_index('asOfDate')
+        # print(self.q_financial_data)
+        self.q_financial_data = self.q_financial_data.loc[self.q_financial_data['currencyCode'] == self.financial_currency ]
 
         if isinstance(self.q_financial_data, pd.DataFrame) :
             self.q_financial_data.ffill(axis = 0, inplace = True)
             last_date_y = self.y_financial_data.index[-1]
             last_date_q = self.q_financial_data.index[-1]
+
             for d in BALANCE_INFOS:
                 if d in self.q_financial_data.columns :
-                    self.y_financial_data.loc[last_date_y , d] = \
-                        self.q_financial_data.loc[last_date_q , d]
+                    self.y_financial_data.loc[last_date_y , d] = self.q_financial_data.loc[last_date_q , d]
 
-        self.nb_shares = self.y_financial_data["ShareIssued"].iloc[-1]
+        self.nb_shares = self.y_financial_data["BasicAverageShares"].iloc[-1]
         if self.market_cap is None :
             self.market_cap = self.nb_shares * self.currentprice
 
-        self.financial_currency = self.y_financial_data['currencyCode'].iloc[-1]
+        # self.financial_currency = self.y_financial_data['currencyCode'].iloc[-1]
 
         self.eval_beta()
 
-        self.financial_currency_history = self.history[['close']].iloc[:-1].copy()
+        self.financial_currency_price_history = self.history[['close']].iloc[:-1].copy()
         if self.price_currency != self.financial_currency:
             self.market_infos.update_rate_dic(self.price_currency, self.financial_currency)
             rate_symb = self.price_currency + self.financial_currency + "=X"
@@ -248,7 +264,7 @@ class Share():
             rate = self.market_infos.rate_current_dic[rate_symb]
             self.currentprice *= rate
             self.market_cap *= rate
-            self.financial_currency_history = self.financial_currency_history.mul(self.market_infos.rate_history_dic[rate_symb],axis = 0)
+            self.financial_currency_price_history = self.financial_currency_price_history.mul(self.market_infos.rate_history_dic[rate_symb],axis = 0)
             
 
         if self.compute_financial_info(pr = pr) :
@@ -320,24 +336,26 @@ class Share():
         else :
             self.fcf = y_financial_data['FreeCashFlow'][-3:].mean()
 
-        # if self.fcf < 0 :
-        #     self.fcf = y_financial_infos['FreeCashFlow'][-1]
-
         if self.fcf < 0 :
             self.fcf = y_financial_data['FreeCashFlow'].mean()
 
+        self.fcf_last = y_financial_data['FreeCashFlow'][-1]
+
         ### price to fcf multiple
-        df_multiple = y_financial_data[['ShareIssued', 'FreeCashFlow' ]].copy()
+        df_multiple = y_financial_data[['BasicAverageShares', 'FreeCashFlow' ]].copy()
         df_multiple.index = df_multiple.index.date
-        df_multiple = pd.concat([self.financial_currency_history, df_multiple], axis = 1).sort_index().ffill().dropna()
-        df_multiple['price_to_fcf'] = df_multiple['ShareIssued'] * df_multiple['close'] / df_multiple['FreeCashFlow'] 
-        self.price_to_fcf = df_multiple.loc[df_multiple['FreeCashFlow'] > 0 , 'price_to_fcf'].mean()
+        df_multiple = pd.concat([self.financial_currency_price_history, 
+                                 df_multiple], axis = 1).sort_index().ffill().dropna()
+        df_multiple['price_to_fcf'] = df_multiple['BasicAverageShares'] * df_multiple['close'] / df_multiple['FreeCashFlow']
+        self.df_multiple = df_multiple
+        self.price_to_fcf = df_multiple.loc[df_multiple['FreeCashFlow'] > 0 , 'price_to_fcf'].median()
+
         # if self.price_to_fcf < 0 :
         #     self.price_to_fcf = df_multiple['price_to_fcf'].max()
         
-        if self.price_to_fcf < 0 :
-            print(f"negative price_to_fcf mean for {self.short_name} can not compute DCF")
-            return(1)
+        # if self.price_to_fcf < 0 :
+        #     print(f"negative price_to_fcf mean for {self.short_name} can not compute DCF")
+        #     return(1)
 
         ### calculation of fcf growth
         delta_t = relativedelta(y_financial_data.index[-1], y_financial_data.index[YEAR_G],)
@@ -401,25 +419,31 @@ class Share():
             return np.nan
         if not start_fcf is None :
             self.fcf = start_fcf
-        if self.fcf < 0 :
-            print(f"negative free cash flow mean for {self.short_name} can not compute DCF")
-            return np.nan
         if use_multiple:
             up_bound = 2
         else : 
             up_bound = self.cmpc
-        res = minimize_scalar(eval_dcf_, args=(self, False),
-                              method= 'bounded', bounds = (-1, up_bound))
-        g = res.x
 
-        self.g = g
+        # compute g from mean fcf
+        if self.fcf < 0 :
+            print(f"negative free cash flow mean for {self.short_name} can not compute DCF")
+        else :
+            res_mean = minimize_scalar(eval_dcf_, args=(self, self.fcf, False),
+                                method= 'bounded', bounds = (-1, up_bound))
+            self.g = res_mean.x
+
+        # compute g_last from last fcf
+        if self.fcf_last >= 0:
+            res_last = minimize_scalar(eval_dcf_, args=(self, self.fcf_last, False),
+                                method= 'bounded', bounds = (-1, up_bound))
+            self.g_last = res_last.x
+
         if pr:
-            print(f"Croissance correspondant au prix courrant: {g*100:.2f}%")
-            self.get_dcf(g, start_fcf= start_fcf, pr = pr)
+            print(f"Croissance correspondant au prix courrant: {self.g*100:.2f}%")
+            self.get_dcf(self.g, start_fcf= start_fcf, pr = pr)
 
-        return g
 
-    def eval_dcf(self, g, pr = False, use_multiple = True):
+    def eval_dcf(self, g :  float, fcf : float, pr = False, use_multiple = True):
         """
         compute company value regarding its actuated free cash flows and compare it 
         to the market value of the company
@@ -431,26 +455,26 @@ class Share():
             g = g[0]
 
         if use_multiple :
-            vt = self.fcf * (1+g)**(NB_YEAR_DCF ) * self.price_to_fcf
+            vt = fcf * (1+g)**(NB_YEAR_DCF ) * self.price_to_fcf
         else :
-            vt = self.fcf * (1+g)**(NB_YEAR_DCF ) / (cmpc - g)
+            vt = fcf * (1+g)**(NB_YEAR_DCF ) / (cmpc - g)
         vt_act = vt / (1+cmpc)**(NB_YEAR_DCF)
 
         a = (1+g)/(1+cmpc)
         # fcf * sum of a**k for k from 1 to NB_YEAR_DCF 
-        fcf_act_sum = self.fcf * ((a**NB_YEAR_DCF - 1)/(a-1) - 1 + a**(NB_YEAR_DCF))
+        fcf_act_sum = fcf * ((a**NB_YEAR_DCF - 1)/(a-1) - 1 + a**(NB_YEAR_DCF))
         enterprise_value = fcf_act_sum + vt_act
      
 
         if pr :
-            fcf = np.array([self.fcf * (1+g)**(k) for k in range(1,1 + NB_YEAR_DCF)])
+            fcf_ar = np.array([fcf * (1+g)**(k) for k in range(1,1 + NB_YEAR_DCF)])
             act_vec = np.array([1/((1+cmpc)**k) for k in range(1,1 + NB_YEAR_DCF)])
-            fcf_act = fcf * act_vec
+            fcf_act = fcf_ar * act_vec
             print("\r")
             val_share = (enterprise_value - net_debt)/ self.nb_shares
             nyear_disp = min(10,NB_YEAR_DCF)
             annees = list(2023 + np.arange(0, nyear_disp)) +  ["Terminal"]
-            table = np.array([ np.concatenate((fcf[:nyear_disp] ,[vt])),
+            table = np.array([ np.concatenate((fcf_ar[:nyear_disp] ,[vt])),
                               np.concatenate((fcf_act[:nyear_disp], [vt_act]))])
             print(f"Prévision pour une croissance de {g*100:.2f}% :")
             print(tabulate(table, floatfmt= ".4e",
@@ -467,20 +491,22 @@ def eval_dcf_(g, *data):
     reformated Share.eval_dcf() function for compatibility with minimize_scalar
     """
     share : Share = data[0]
-    pr = data[1]
-    # share, pr = data
-    return share.eval_dcf(g, pr)
+    fcf : float = data[1]
+    pr = data[2]
+
+    return share.eval_dcf(g = g, fcf = fcf, pr = pr)
 
 
 class DCFAnal():
     """
     object containing a reverse dcf analysis and all its context
     """
-    def __init__(self, symbol_list : list[str] = None) -> None:
+    def __init__(self, symbol_list : list[str] = None, use_multiple = True) -> None:
 
         self.df = None
         self.market_infos = MarketInfos()
         self.symbol_list = symbol_list
+        self.use_multiple = use_multiple
 
         if os.path.isfile(SHARE_PROFILE_FILE) :
             with open(SHARE_PROFILE_FILE, "r", encoding="utf-8") as file :
@@ -492,34 +518,37 @@ class DCFAnal():
         self.share_list = [Share(sym, market_infos= self.market_infos,
                                  shares_profile= self.shares_profile) for sym in symbol_list]
 
-    def resume_list(self, use_multiple = True) :
+    def process_list(self ) :
 
         """
         Generate an analysis summary dataframe
         """
 
         share_list = self.share_list
-        g_l = [s.eval_g(use_multiple= use_multiple) for s in share_list]
+        for s in share_list :
+            s.eval_g(use_multiple= self.use_multiple)
 
         with open(SHARE_PROFILE_FILE, "w", encoding="utf-8") as outfile :
             json.dump(self.shares_profile, outfile, indent = 4)
             outfile.close()
         df = pd.DataFrame(index= self.symbol_list,
-                          data= {'short_name' : [s.short_name for s in share_list] ,
-                                    'current_price' : [s.currentprice for s in share_list],
-                                    'currency' : [s.financial_currency for s in share_list],
-                                    'beta' : [s.beta for s in share_list],
-                                    'price_to_fcf' : [s.price_to_fcf for s in share_list],
-                                    'capital_cost' :[s.capital_cost for s in share_list],
-                                    'cmpc' :[s.cmpc for s in share_list],
-                                    'assumed_g' : g_l ,  
-                                    'per' :  [s.per for s in share_list ],
-                                    'roic' : [s.roic for s in share_list], 
-                                    'debt_to_equity' : [s.debt_to_equity for s in share_list],
-                                    'price_to_book' : [s.price_to_book for s in share_list] ,
-                                    # 'mean_g_fcf': [s.mean_g_fcf for s in share_list] ,
-                                    # 'mean_g_tr' : [s.mean_g_tr for s in share_list],
-                                    # 'mean_g_inc' : [s.mean_g_netinc for s in share_list]
+                          data= {
+                                'short_name' : [s.short_name for s in share_list] ,
+                                'current_price' : [s.currentprice for s in share_list],
+                                'currency' : [s.financial_currency for s in share_list],
+                                'beta' : [s.beta for s in share_list],
+                                'price_to_fcf' : [s.price_to_fcf for s in share_list],
+                                'capital_cost' : [s.capital_cost for s in share_list],
+                                'cmpc' : [s.cmpc for s in share_list],
+                                'assumed_g' : [s.g for s in share_list],  
+                                'assumed_g_last' : [s.g_last for s in share_list],  
+                                'per' :  [s.per for s in share_list ],
+                                'roic' : [s.roic for s in share_list], 
+                                'debt_to_equity' : [s.debt_to_equity for s in share_list],
+                                'price_to_book' : [s.price_to_book for s in share_list] ,
+                                # 'mean_g_fcf': [s.mean_g_fcf for s in share_list] ,
+                                # 'mean_g_tr' : [s.mean_g_tr for s in share_list],
+                                # 'mean_g_inc' : [s.mean_g_netinc for s in share_list]
                                     })
 
 
@@ -569,14 +598,14 @@ class DCFAnal():
             f"{col_letter['current_price']}:{col_letter['current_price']}", 13, number)
         worksheet.set_column(
             f"{col_letter['beta']}:{col_letter['price_to_fcf']}", 8, number)
-        worksheet.set_column(f"{col_letter['capital_cost']}:{col_letter['assumed_g']}", 13, percent)
+        worksheet.set_column(f"{col_letter['capital_cost']}:{col_letter['assumed_g_last']}", 13, percent)
         worksheet.set_column(f"{col_letter['per']}:{col_letter['price_to_book']}", 13, number)
         worksheet.set_column(f"{col_letter['roic']}:{col_letter['roic']}", 13, percent )
         # worksheet.set_column(f"{col_letter['mean_g_fcf']}:{col_letter['diff_g']}", 13, percent )
 
         # format assumed g
         worksheet.conditional_format(
-            f"{col_letter['assumed_g']}2:{col_letter['assumed_g']}{len(df.index)+1}",
+            f"{col_letter['assumed_g']}2:{col_letter['assumed_g_last']}{len(df.index)+1}",
             {"type": "3_color_scale", 'min_type': 'num',
             'max_type': 'max', 'mid_type' : 'percentile',
             'min_value' : -0.2, 'mid_value' : 50,  
@@ -636,21 +665,11 @@ class DCFAnal():
         else :
             os.startfile(xl_outfile)
 
-        # valss = df.values.tolist()
-        # for vals in valss:
-        #     vals[1] = f"{vals[1]:.2f}"
-        #     for i in range(6,len(vals)):
-        #         if isinstance(vals[i], str) :
-        #             continue
-        #         vals[i] = f"{Fore.GREEN}{vals[i]:.2%}{Fore.RESET}" if vals[i] >=0 else f"{Fore.RED}{vals[i]:.2%}{Fore.RESET}"
-
-        # table = tabulate(valss, headers= df.columns, showindex= list(df.index), stralign= "right") 
-        # print("\r")
-        # print(table)
+ 
 
 def upload_file(outfile):
     """
-    Insert new file.
+    Upload a new file in google drive
     Returns : Id's of the file uploaded
 
     """

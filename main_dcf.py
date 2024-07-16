@@ -10,7 +10,13 @@ from datetime import date
 outfile = os.path.join(os.environ["USERPROFILE"], r"Documents\rdcf.xlsx")
 
 share_list = [
+    "TSM",
+    "PBR",
     "TTE.PA",
+    "MC.PA", #LVMH
+    "FRVIA.PA", # faurecia
+    "MT", # arcelormital
+    "6501.T",  # Hitachi 
     "RMS.PA", #hermes
     'GTT.PA',
     "ACA.PA", #credit agricole
@@ -18,20 +24,16 @@ share_list = [
     "TE.PA", #technip energie
     "RUI.PA",
     "BNP.PA",
-    "FRVIA.PA", # faurecia
     "GLE.PA",
     "ASML.AS",
     "DELL",
     "TSLA", 
-    "MT.AS", # arcelormital
     "ERA.PA", #eramet
-    "MC.PA", #LVMH
     "CARL-B.CO",
     "TEP.PA", #teleperformance
     "AMZN", #AMZN  
     "SPM.MI",
     "SAF.PA", #Safran
-    "PBR",
     "AKE.PA",
     "NVDA",
     "SAN.PA", # sanofi
@@ -56,7 +58,6 @@ share_list = [
     "DBG.PA",
     "BN.PA",
     "RR.L", # rolls royce
-    "TSM",
     "TLW.L", # Tullow Oil
     "INTC",
     "SCI", 
@@ -88,22 +89,23 @@ share_list = [
     "RXL.PA",
     "MAU.PA",
     "EQNR",   # equinor  
-    "DIS",
     "SCR.PA",
-    "CLIQ.F",
+    "CLIQ.DE",
     "TM", # Toyota
     "SMSN.IL", #samsung electronic
     "1211.HK", # BYD co electric car
-    "6501.T",  # Hitachi 
     "AAPL"
       ]
 
 
-# share_list_1 = ["MSFT"]
-# dcf_anal = DCFAnal(share_list_1)
+# share = Share("TSM")
+# share.querry_financial_info()
+# print(share.y_financial_data)
+# print(share.price_currency)
+# print(share.df_multiple)
 
 dcf_anal = DCFAnal(share_list)
-dcf_anal.resume_list()
+dcf_anal.process_list()
 # dcf_anal.load_df()
 
 dcf_anal.to_excel(outfile)
@@ -111,7 +113,7 @@ dcf_anal.to_excel(outfile)
 
 
 
-# share = Share("PBR")
+
 # share = Share("ACA.PA")
 # share.eval_g(2.6e9, True)
 # share = Share("TTE.PA")
