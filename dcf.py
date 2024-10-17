@@ -31,11 +31,12 @@ IS = 0.25
 NB_YEAR_DCF = 10
 HISTORY_TIME = 5 
 YEAR_G = 0
-INCOME_INFOS = [ 'FreeCashFlow','TotalRevenue', "NetIncome",  ]
+INCOME_INFOS = [ 'FreeCashFlow','TotalRevenue', "NetIncome",]
+PAYOUT_INFOS = [ 'RepurchaseOfCapitalStock', 'CashDividendsPaid', 'CommonStockIssuance']
 BALANCE_INFOS = ['currencyCode', 'TotalDebt', 'CashAndCashEquivalents',
                  'CommonStockEquity', "InvestedCapital",  "BasicAverageShares"]
 
-TYPES = INCOME_INFOS + BALANCE_INFOS
+TYPES = INCOME_INFOS + BALANCE_INFOS + PAYOUT_INFOS
 MARKET_CURRENCY = "USD"
 
 BROWSER_HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)\
@@ -48,7 +49,8 @@ XPATH_FED_FUND_RATE = "/html/body/main/div/div[4]/div/div/div/div/div[2]/div[1]/
 
 SHARE_PROFILE_FILE = 'share_profile.json'
 
-
+ERROR_SYMBOL = 1
+ERROR_QUERRY_PRICE = 2
 class MarketInfos():
     """
     Global market informations
@@ -148,6 +150,8 @@ class Share():
         self.g_last = np.nan
         self.financial_currency_price_history = None
         self.df_multiple = None
+        self.capital_cost_equal_market = False
+        self.total_payout_ratio = None
 
     def eval_beta(self) :
         """
@@ -180,7 +184,7 @@ class Share():
 
             short_name_xpath = '//*[@id="quote-header-info"]/div[2]/div[1]/div[1]/h1'
             currency_xpath = '//*[@id="quote-header-info"]/div[2]/div[1]/div[2]/span'
-            r = requests.get(url_yahoo, verify= False, headers= BROWSER_HEADERS, )
+            r = requests.get(url_yahoo, verify= False, headers= BROWSER_HEADERS, timeout= 40 )
             self.short_name = html.fromstring(r.content).xpath(short_name_xpath)[0].text
             self.price_currency = html.fromstring(r.content).xpath(currency_xpath)[0].text.split()[-1].strip(')')
             self.shares_profile[self.symbol] = { "short_name" : self.short_name , "price_currency" : self.price_currency }
@@ -188,7 +192,7 @@ class Share():
             self.short_name = self.shares_profile[self.symbol]["short_name"]
             self.price_currency = self.shares_profile[self.symbol]["price_currency"]
 
-    def querry_financial_info(self, pr = False, ):
+    def querry_financial_info(self, pr = False):
         """
         Get the share associated financial infos from yahoo finance api 
         """
@@ -202,8 +206,9 @@ class Share():
             self.history = self.tk.history(period = '5y', interval= "1mo").loc[self.symbol][['close', 'adjclose']]
         except KeyError:
             print(f"unknown share symbol {self.symbol}")
-            return(1)
+            return(ERROR_SYMBOL)
         self.currentprice = self.history['adjclose'].iloc[-1]
+
 
         price = tk.price[self.symbol]
         
@@ -213,15 +218,15 @@ class Share():
             self.market_cap = price['marketCap']
 
         except TypeError :
-            print(f"price data not availlable from api for {self.symbol}")
-            self.querry_price_from_web()
+            print(f"Failed to get price data from api for {self.symbol}, retry...")
+            return(ERROR_QUERRY_PRICE)
+            # self.querry_price_from_web()
 
         
 
         self.y_financial_data : pd.DataFrame = tk.get_financial_data(TYPES,)
         self.financial_currency = self.y_financial_data.dropna(subset="FreeCashFlow")["currencyCode"].value_counts().idxmax()
         self.y_financial_data = self.y_financial_data.sort_values(by = ['asOfDate' , 'BasicAverageShares'], ascending=[1, 0])
-        # print(self.y_financial_data)
 
         self.y_financial_data['BasicAverageShares'] = self.y_financial_data['BasicAverageShares'].ffill(axis = 0, )
         self.y_financial_data = self.y_financial_data.loc[self.y_financial_data['currencyCode'] == self.financial_currency ]
@@ -232,6 +237,8 @@ class Share():
                                                             ).drop_duplicates(
                                                                 subset = ['asOfDate', ],
                                                                 keep= 'last').set_index('asOfDate')
+        # print(self.y_financial_data)
+        # stop
       
 
         self.q_financial_data = tk.get_financial_data(TYPES , frequency= "q",
@@ -271,7 +278,7 @@ class Share():
             return 1
         return 0
 
-    def compute_financial_info(self, pr = True) :
+    def compute_financial_info(self, pr = True,) :
         """
         Compute intermedate financial infos used as input for dcf calculation
         """
@@ -285,7 +292,12 @@ class Share():
         # self.nb_shares = int(self.market_cap / self.currentprice)
         stock_equity = last_financial_info['CommonStockEquity']
         market_cap = self.market_cap
-        self.capital_cost = free_risk_rate + self.beta * (market_rate - free_risk_rate)
+
+        if self.capital_cost_equal_market :
+            self.capital_cost = market_rate
+        else : 
+            self.capital_cost = free_risk_rate + self.beta * (market_rate - free_risk_rate)
+        
         try :
             total_debt = last_financial_info['TotalDebt']
         except KeyError:
@@ -309,6 +321,12 @@ class Share():
         net_income = y_financial_data['NetIncome'][-1]
         last_delta_t = relativedelta(y_financial_data.index[-1], y_financial_data.index[-2],)
 
+        payout = 0
+        for info in PAYOUT_INFOS :
+            if info in y_financial_data:
+                payout -= y_financial_data[info][-3:].mean()
+        
+        self.total_payout_ratio = payout / y_financial_data['NetIncome'][-3:].mean()
         self.per = market_cap / net_income
 
         invested_capital = last_financial_info['InvestedCapital']
@@ -350,6 +368,8 @@ class Share():
         self.df_multiple = df_multiple
         self.price_to_fcf = df_multiple.loc[df_multiple['FreeCashFlow'] > 0 , 'price_to_fcf'].median()
 
+        # print(self.df_multiple)
+        # stop
         # if self.price_to_fcf < 0 :
         #     self.price_to_fcf = df_multiple['price_to_fcf'].max()
         
@@ -411,9 +431,7 @@ class Share():
         Evaluate company assumed growth rate from fundamental financial data
         """
 
-        if self.cmpc is None :
-            if self.querry_financial_info(pr = pr) :
-                return np.nan
+        
         if self.cmpc < 0:
             print(f"negative cmpc for {self.short_name} can not compute DCF")
             return np.nan
@@ -501,12 +519,15 @@ class DCFAnal():
     """
     object containing a reverse dcf analysis and all its context
     """
-    def __init__(self, symbol_list : list[str] = None, use_multiple = True) -> None:
+    def __init__(self, symbol_list : list[str] = None, 
+                 use_multiple = True,
+                 capital_cost_equal_market = False) -> None:
 
         self.df = None
         self.market_infos = MarketInfos()
         self.symbol_list = symbol_list
         self.use_multiple = use_multiple
+        self.capital_cost_equal_market = capital_cost_equal_market
 
         if os.path.isfile(SHARE_PROFILE_FILE) :
             with open(SHARE_PROFILE_FILE, "r", encoding="utf-8") as file :
@@ -526,6 +547,14 @@ class DCFAnal():
 
         share_list = self.share_list
         for s in share_list :
+            s.capital_cost_equal_market = self.capital_cost_equal_market
+
+            flg = s.querry_financial_info()
+            if flg == ERROR_SYMBOL :
+                continue
+            while flg == ERROR_QUERRY_PRICE :
+                flg = s.querry_financial_info()
+
             s.eval_g(use_multiple= self.use_multiple)
 
         with open(SHARE_PROFILE_FILE, "w", encoding="utf-8") as outfile :
@@ -546,6 +575,7 @@ class DCFAnal():
                                 'roic' : [s.roic for s in share_list], 
                                 'debt_to_equity' : [s.debt_to_equity for s in share_list],
                                 'price_to_book' : [s.price_to_book for s in share_list] ,
+                                'total_payout_ratio' : [s.total_payout_ratio for s in share_list] ,
                                 # 'mean_g_fcf': [s.mean_g_fcf for s in share_list] ,
                                 # 'mean_g_tr' : [s.mean_g_tr for s in share_list],
                                 # 'mean_g_inc' : [s.mean_g_netinc for s in share_list]
@@ -589,6 +619,11 @@ class DCFAnal():
         format3 = wb.add_format({"bg_color": "#F8696B",})
 
         worksheet = writer.sheets['rdcf']
+
+        # add hyperlink
+        for i, s in enumerate(df.index):
+            worksheet.write_url(f'B{i+2}', fr'https://finance.yahoo.com/quote/{s}/', string= df.loc[s, 'short_name'] )
+
         worksheet.add_table(0,0,len(df.index),len(df.columns) ,
                             {"columns" : [{'header' : 'symbol'}]
                                 + [{'header' : col} for col in df.columns],
@@ -598,8 +633,9 @@ class DCFAnal():
             f"{col_letter['current_price']}:{col_letter['current_price']}", 13, number)
         worksheet.set_column(
             f"{col_letter['beta']}:{col_letter['price_to_fcf']}", 8, number)
-        worksheet.set_column(f"{col_letter['capital_cost']}:{col_letter['assumed_g_last']}", 13, percent)
+        worksheet.set_column(f"{col_letter['capital_cost']}:{col_letter['assumed_g_last']}", 11, percent)
         worksheet.set_column(f"{col_letter['per']}:{col_letter['price_to_book']}", 13, number)
+        worksheet.set_column(f"{col_letter['total_payout_ratio']}:{col_letter['total_payout_ratio']}", 11, percent )
         worksheet.set_column(f"{col_letter['roic']}:{col_letter['roic']}", 13, percent )
         # worksheet.set_column(f"{col_letter['mean_g_fcf']}:{col_letter['diff_g']}", 13, percent )
 
